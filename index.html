@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Catálogo Lupo | Buscador de productos</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="header">
+    <div class="header-inner">
+      <div class="brand">
+        <div class="logo">LU</div>
+        <div>
+          <h1>Catálogo Lupo</h1>
+          <p>Buscador interno por código, categoría, color y talla.</p>
+        </div>
+      </div>
+      <div class="top-actions">
+        <button id="clearBtn" class="btn">Limpiar filtros</button>
+        <button id="copyBtn" class="btn">Copiar códigos visibles</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="catalog-layout">
+      <aside class="filters" aria-label="Filtros de búsqueda">
+        <h2>Filtros</h2>
+        <div class="filters-grid">
+          <div class="field">
+            <label for="search">Buscador general</label>
+            <input id="search" placeholder="Ej: 73405, bóxer, seamless, negro, algodón...">
+          </div>
+          <div class="field">
+            <label for="codes">Códigos</label>
+            <textarea id="codes" placeholder="Pegá códigos: 73405-001 40300-001"></textarea>
+          </div>
+          <div class="field">
+            <label for="catalogFilter">Catálogo</label>
+            <select id="catalogFilter"></select>
+          </div>
+          <div class="field">
+            <label for="categoryFilter">Categoría</label>
+            <select id="categoryFilter"></select>
+          </div>
+          <div class="field">
+            <label for="sizeFilter">Talla</label>
+            <select id="sizeFilter"></select>
+          </div>
+          <div class="field">
+            <label for="colorFilter">Color</label>
+            <select id="colorFilter"></select>
+          </div>
+        </div>
+      </aside>
+
+      <section class="results-panel" aria-label="Resultados de productos">
+        <div class="content-head">
+          <div>
+            <h3><span id="resultCount">0</span> productos encontrados</h3>
+            <p>Para buscar varios códigos, pegalos separados por coma, espacio o salto de línea.</p>
+          </div>
+          <div class="view-tools">
+            <button id="gridBtn" class="btn primary">Grilla</button>
+            <button id="listBtn" class="btn">Lista</button>
+          </div>
+        </div>
+
+        <section id="empty" class="empty">
+          <h3>No encontré productos con esos filtros.</h3>
+          <p>Probá buscar solo los primeros números del código o limpiar algún filtro.</p>
+        </section>
+        <section id="grid" class="grid"></section>
+        <p class="footer-note">Los datos fueron extraídos automáticamente de los PDFs cargados. Conviene revisar la página original del PDF para confirmar detalles finales de compra, colores o composición.</p>
+      </section>
+    </div>
+  </main>
+
+  <div id="modal" class="modal">
+    <button id="closeModal" class="close" aria-label="Cerrar">×</button>
+    <div class="modal-card">
+      <div class="modal-img"><img id="modalImage" alt="Imagen del producto"></div>
+      <div class="modal-body">
+        <div id="modalCode" class="modal-code"></div>
+        <h3 id="modalTitle"></h3>
+        <p id="modalDesc" class="desc" style="display:block;-webkit-line-clamp:unset"></p>
+        <table id="modalMeta" class="table"></table>
+      </div>
+    </div>
+  </div>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
