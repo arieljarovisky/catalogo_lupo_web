@@ -22,6 +22,10 @@
       <div class="top-actions">
         <button id="clearBtn" class="btn">Limpiar filtros</button>
         <button id="copyBtn" class="btn">Copiar códigos visibles</button>
+        <button id="cartBtn" class="btn primary cart-btn" type="button">
+          Pedido
+          <span id="cartCount" class="cart-count">0</span>
+        </button>
       </div>
     </div>
   </header>
@@ -88,9 +92,46 @@
         <div id="modalCode" class="modal-code"></div>
         <h3 id="modalTitle"></h3>
         <p id="modalDesc" class="desc" style="display:block;-webkit-line-clamp:unset"></p>
+        <form id="addToCartForm" class="cart-form" autocomplete="off">
+          <input type="hidden" id="cartProductId" value="">
+          <div class="cart-form-grid">
+            <div class="field">
+              <label for="cartSize">Talle</label>
+              <select id="cartSize" required></select>
+            </div>
+            <div class="field">
+              <label for="cartColor">Color</label>
+              <select id="cartColor" required></select>
+            </div>
+            <div class="field">
+              <label for="cartQty">Cantidad</label>
+              <input id="cartQty" type="number" min="1" step="1" value="1" required>
+            </div>
+          </div>
+          <button type="submit" class="btn primary cart-add-btn">Agregar al pedido</button>
+          <p id="cartFormMsg" class="cart-form-msg" hidden></p>
+        </form>
         <table id="modalMeta" class="table"></table>
       </div>
     </div>
+  </div>
+
+  <div id="cartDrawer" class="cart-drawer" aria-hidden="true">
+    <div class="cart-backdrop" data-close-cart></div>
+    <aside class="cart-panel" role="dialog" aria-labelledby="cartTitle">
+      <div class="cart-panel-head">
+        <div>
+          <h2 id="cartTitle">Pedido</h2>
+          <p id="cartSummary">Sin artículos</p>
+        </div>
+        <button id="closeCart" class="btn" type="button" aria-label="Cerrar pedido">Cerrar</button>
+      </div>
+      <div id="cartItems" class="cart-items"></div>
+      <div class="cart-panel-foot">
+        <button id="clearCartBtn" class="btn" type="button">Vaciar</button>
+        <button id="exportCartBtn" class="btn primary" type="button">Exportar Excel</button>
+      </div>
+    </aside>
   </div>
 
   <script src="data.js"></script>
