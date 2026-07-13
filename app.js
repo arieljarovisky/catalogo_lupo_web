@@ -178,7 +178,7 @@ function filtered() {
     if (state.size && !normalizeText(p.sizes).includes(normalizeText(state.size))) return false;
     if (state.color && !p.colors.some(c => normalizeText(`${c.code} ${c.name}`).includes(wantedColor))) return false;
     return true;
-  });
+  }).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
 }
 function render() {
   const data = filtered();
