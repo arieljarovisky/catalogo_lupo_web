@@ -3,6 +3,7 @@
   "rewrites": [
     { "source": "/pedido/:token", "destination": "/api" },
     { "source": "/api/:path*", "destination": "/api" },
+    { "source": "/assets/uploads/:path*", "destination": "/api" },
     { "source": "/brasil/pedido", "destination": "/api" },
     { "source": "/brasil", "destination": "/api" },
     { "source": "/admin", "destination": "/api" },

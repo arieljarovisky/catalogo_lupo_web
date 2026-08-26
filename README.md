@@ -34,6 +34,9 @@ Los datos de ficha se extraen de los PDF en `pdfs/nuevos-catalogos/` (Boxers y s
 
 El frontend se sirve estático. El login y las APIs (`/api/...`) van por `server.js` a través de `api/index.js`.
 
-En el proyecto de Vercel, agregá la variable de entorno `SESSION_SECRET` (un texto largo y aleatorio). Sin eso, las sesiones pueden invalidarse entre deploys.
+En el proyecto de Vercel, agregá:
 
-En Vercel el `db.json` vive en `/tmp`: usuarios y precios editados en Admin **no persisten** entre cold starts. Para producción hace falta una base externa.
+- `SESSION_SECRET`: texto largo y aleatorio (sin eso las sesiones pueden invalidarse entre deploys).
+- `BLOB_READ_WRITE_TOKEN`: creá un store en **Storage → Blob** y conectalo al proyecto. Sin esto, cambiar fotos en Admin falla en producción (el disco de la función es efímero).
+
+En Vercel el `db.json` vive en `/tmp`: usuarios, precios y overrides de imagen editados en Admin **no persisten** entre cold starts. Para producción hace falta una base externa; las URLs de Blob sí quedan públicas, pero la referencia en `productMeta` se pierde si el `db.json` se reinicia.
