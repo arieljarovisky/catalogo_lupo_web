@@ -111,6 +111,10 @@ button, input, select, textarea { font: inherit; }
   letter-spacing: .02em;
   border-radius: var(--radius-sm);
 }
+.btn[hidden],
+a.btn[hidden] {
+  display: none !important;
+}
 .btn:hover { opacity: .86; }
 .btn:disabled { opacity: .4; cursor: not-allowed; }
 .btn-black { background: var(--black); color: #fff; }

@@ -428,8 +428,13 @@ async function init() {
   whatsappNumber = me.whatsappNumber || '';
   $('userName').textContent = currentUser.name || currentUser.username;
 
+  const admin = isAdmin();
+  if ($('adminLink')) $('adminLink').hidden = !admin;
+  if ($('brasilLink')) $('brasilLink').hidden = true;
+  if ($('mayoristaLink')) $('mayoristaLink').hidden = true;
+
   if (brasilMode) {
-    if (currentUser.role !== 'admin') {
+    if (!admin) {
       window.location.href = '/';
       return;
     }
@@ -438,7 +443,6 @@ async function init() {
     if ($('catalogBlurb')) $('catalogBlurb').textContent = 'Todos los productos del sistema. Precios en FOB USD para pedidos a Brasil.';
     if ($('userList')) $('userList').textContent = 'Pedido Brasil · FOB USD';
     if ($('mayoristaLink')) $('mayoristaLink').hidden = false;
-    if ($('brasilLink')) $('brasilLink').hidden = true;
     if ($('logoHome')) $('logoHome').href = '/brasil';
     document.body.classList.add('brasil-mode');
     if ($('brasilImport')) $('brasilImport').hidden = false;
@@ -447,9 +451,8 @@ async function init() {
     if ($('dockPedidoPageBtn')) $('dockPedidoPageBtn').hidden = false;
   } else {
     $('userList').textContent = me.priceListName ? `Lista ${me.priceListName}` : 'Sin lista asignada';
-    if (currentUser.role === 'admin' && $('brasilLink')) $('brasilLink').hidden = false;
+    if (admin && $('brasilLink')) $('brasilLink').hidden = false;
   }
-  if (currentUser.role === 'admin') $('adminLink').hidden = false;
 
   const catalog = brasilMode
     ? await api('/api/admin/catalog-brasil')
