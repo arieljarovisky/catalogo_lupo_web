@@ -320,28 +320,20 @@ function card(p) {
       <div class="meta"><span class="pill">${escapeHtml(catalogLabel(p.catalog))}</span><span class="pill">${escapeHtml(translateText(p.category))}</span></div>
       <p class="desc">${escapeHtml(translateText(p.description || 'Sin descripción cargada.'))}</p>
       <div class="card-actions">
-        <button class="btn btn-black" data-open-shortcut="${p.id}" data-shortcut="colors">Pedir</button>
+        <button class="btn btn-black" data-open-shortcut="${p.id}" data-shortcut="both">Pedir</button>
       </div>
     </div>
   </article>`;
 }
 
-function fillCartForm(p, shortcut = '') {
+function fillCartForm(p) {
   $('cartProductId').value = p.id;
-  const sizes = sizesFrom(p.sizes);
-  $('cartSizeChips').innerHTML = sizes.map(s =>
-    `<button type="button" class="choice-chip" data-size="${escapeHtml(s)}">${escapeHtml(s)}</button>`
-  ).join('');
+  $('cartSizeChips').innerHTML =
+    `<button type="button" class="choice-chip active" data-size="${escapeHtml(SURTIDO_SIZE)}">${escapeHtml(SURTIDO_SIZE)}</button>`;
   $('cartQty').value = 1;
   $('cartFormMsg').hidden = true;
-  selectColor(SURTIDO_COLOR, SURTIDO_COLOR_NAME);
-  if (shortcut === 'sizes' || shortcut === 'both') {
-    selectSize(SURTIDO_SIZE);
-  } else if (sizes.length === 1) {
-    selectSize(sizes[0]);
-  } else {
-    selectSize('');
-  }
+  selectSize(SURTIDO_SIZE);
+  selectColor(SURTIDO_COLOR, 'Surtido');
 }
 
 function selectSize(value) {
@@ -363,7 +355,7 @@ function onChipClick(e, kind) {
   if (kind === 'size') selectSize(btn.dataset.size);
 }
 
-function openModal(id, shortcut = '') {
+function openModal(id) {
   const p = products.find(x => x.id === id);
   if (!p) return;
   modalProduct = p;
@@ -380,13 +372,13 @@ function openModal(id, shortcut = '') {
   $('modalPrice').textContent = formatArs(p.priceArs);
   $('modalPrice').classList.toggle('muted', !Number.isFinite(p.priceArs));
   $('modalDesc').textContent = translateText(p.description || '');
-  fillCartForm(p, shortcut);
+  fillCartForm(p);
   $('modalMeta').innerHTML = `
     <tr><td>Precio</td><td>${escapeHtml(formatArs(p.priceArs))}</td></tr>
     <tr><td>Catálogo</td><td>${escapeHtml(catalogLabel(p.catalog))}</td></tr>
     <tr><td>Categoría</td><td>${escapeHtml(translateText(p.category))}</td></tr>
-    <tr><td>Talles</td><td>${escapeHtml(p.sizes || 'No detectado')}</td></tr>
-    <tr><td>Colores</td><td>${(p.colors || []).map(c => escapeHtml(colorLabel(c))).join('<br>') || 'No detectado'}</td></tr>
+    <tr><td>Talles</td><td>Surtido</td></tr>
+    <tr><td>Colores</td><td>Surtido</td></tr>
     <tr><td>Tecnología</td><td>${(p.tech || []).map(t => escapeHtml(translateText(t))).join(' · ') || 'No detectado'}</td></tr>
     <tr><td>Origen</td><td>${p.pdf ? `<a href="${p.pdf.startsWith('http') ? p.pdf : `${p.pdf}#page=${p.page}`}" target="_blank">Ver catálogo${p.page ? `, página ${p.page}` : ''}</a>` : '—'}</td></tr>`;
   $('modal').classList.add('open');
