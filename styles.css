@@ -510,6 +510,26 @@ html[data-text="xl"] .info h4 { font-size: 20px; min-height: 0; }
 html[data-text="xl"] .price { font-size: 24px; }
 html[data-text="xl"] .search-box input { font-size: 18px; padding: 16px; }
 
+.cart-import {
+  padding: 0 14px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cart-import-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.cart-import-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.cart-import-file { cursor: pointer; display: inline-flex; align-items: center; }
 .cart-form-msg { margin: 10px 0 0; font-size: 13px; font-weight: 700; }
 .cart-form-msg.ok { color: #1a7a3c; }
 .cart-form-msg.err { color: var(--red); }

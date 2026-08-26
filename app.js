@@ -180,6 +180,135 @@ function buildCatalogNav(catalogs) {
 function cartLineKey(item) {
   return [item.code, item.size, item.colorCode, item.colorName || ''].join('||');
 }
+function normalizeCodeKey(code) {
+  return String(code || '').trim().toUpperCase().replace(/^0+/, '').replace(/[^A-Z0-9]/g, '');
+}
+function findProductByCode(code) {
+  const key = normalizeCodeKey(code);
+  if (!key) return null;
+  const exact = products.find(p => normalizeCodeKey(p.code) === key);
+  if (exact) return exact;
+  return products.find(p => normalizeCodeKey(p.code).endsWith(key) || key.endsWith(normalizeCodeKey(p.code))) || null;
+}
+function matchOrderColor(product, colorName) {
+  const raw = String(colorName || '').trim();
+  const n = normalizeText(raw);
+  if (!n || n === 'surtido' || n === 'todos') {
+    return { code: SURTIDO_COLOR, name: 'Surtido' };
+  }
+  const translated = normalizeText(translateText(raw));
+  const colors = product?.colors || [];
+  const hit = colors.find(c => {
+    const name = normalizeText(c.name);
+    const code = normalizeText(c.code);
+    const tname = normalizeText(translateText(c.name || ''));
+    return name === n || tname === n || name === translated || tname === translated || code === n;
+  }) || colors.find(c => {
+    const name = normalizeText(c.name);
+    const tname = normalizeText(translateText(c.name || ''));
+    return name.includes(n) || n.includes(name) || tname.includes(translated) || translated.includes(tname);
+  });
+  if (hit) return { code: hit.code, name: translateText(hit.name) || hit.name || hit.code };
+  return { code: raw.slice(0, 40), name: translateText(raw) || raw };
+}
+function matchOrderSize(size) {
+  const raw = String(size || '').trim();
+  const n = normalizeText(raw);
+  if (!n || n === 'todos' || n === 'surtido') return SURTIDO_SIZE;
+  return raw;
+}
+function parseOrderCsv(text) {
+  const lines = String(text || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const rows = [];
+  for (const line of lines) {
+    const parts = line.includes(';') ? line.split(';') : line.split(',');
+    const cleaned = parts.map(p => p.trim().replace(/^"|"$/g, ''));
+    // support leading empty column from Numbers export
+    const start = cleaned[0] === '' ? 1 : 0;
+    const code = cleaned[start] || '';
+    const name = cleaned[start + 1] || '';
+    const color = cleaned[start + 2] || '';
+    const size = cleaned[start + 3] || '';
+    const qty = parseInt(cleaned[start + 4], 10);
+    if (!code || /^(codigo|código)$/i.test(code) || /^total$/i.test(code)) continue;
+    if (!Number.isFinite(qty) || qty < 1) continue;
+    rows.push({ code, name, color, size, qty });
+  }
+  return rows;
+}
+function importOrderRows(rows, { notes, replace = true } = {}) {
+  if (!rows.length) throw new Error('No se encontraron líneas válidas en el archivo.');
+  const incoming = [];
+  let matched = 0;
+  let unmatched = 0;
+  for (const row of rows) {
+    const product = findProductByCode(row.code);
+    const color = matchOrderColor(product, row.color);
+    const size = matchOrderSize(row.size);
+    if (product) matched += 1;
+    else unmatched += 1;
+    incoming.push({
+      productId: product?.id || '',
+      code: product?.code || row.code,
+      name: translateText(product?.name || row.name || row.code),
+      size,
+      colorCode: color.code,
+      colorName: color.name,
+      priceArs: null,
+      fobUsd: Number.isFinite(product?.fobUsd) ? product.fobUsd : null,
+      qty: row.qty
+    });
+  }
+  if (replace) cart = [];
+  for (const line of incoming) {
+    const key = cartLineKey(line);
+    const existing = cart.find(item => cartLineKey(item) === key);
+    if (existing) {
+      existing.qty += line.qty;
+      if (existing.fobUsd == null && line.fobUsd != null) existing.fobUsd = line.fobUsd;
+      if (!existing.productId && line.productId) existing.productId = line.productId;
+    } else {
+      cart.push(line);
+    }
+  }
+  if (notes) cartNotes = String(notes).slice(0, 800);
+  saveCart();
+  if ($('cartNotes')) $('cartNotes').value = cartNotes;
+  updateCartBadge();
+  updateOrderDock();
+  renderCart();
+  return { matched, unmatched, lines: incoming.length, units: cartTotalQty() };
+}
+function showImportMsg(text, ok = true) {
+  const msg = $('importOrderMsg');
+  if (!msg) return;
+  msg.hidden = false;
+  msg.textContent = text;
+  msg.classList.toggle('ok', ok);
+  msg.classList.toggle('err', !ok);
+}
+async function loadDanielaOrder() {
+  const res = await fetch('/orders/pedido-daniela-almeida.csv', { credentials: 'include' });
+  if (!res.ok) throw new Error('No se pudo cargar el pedido de Daniela.');
+  const text = await res.text();
+  const rows = parseOrderCsv(text);
+  const result = importOrderRows(rows, {
+    notes: 'Pedido Daniela Almeida',
+    replace: true
+  });
+  showImportMsg(`Pedido cargado: ${result.lines} líneas · ${result.units} u. · ${result.matched} con catálogo${result.unmatched ? ` · ${result.unmatched} sin match` : ''}.`);
+  openCart();
+}
+async function importOrderFromFile(file) {
+  const text = await file.text();
+  const rows = parseOrderCsv(text);
+  const result = importOrderRows(rows, {
+    notes: cartNotes || `Importado: ${file.name}`,
+    replace: !cart.length
+  });
+  showImportMsg(`Importado: ${result.lines} líneas · ${result.matched} con catálogo${result.unmatched ? ` · ${result.unmatched} sin match` : ''}. Ya podés sumar más productos.`);
+  openCart();
+}
 function loadCart() {
   try {
     const parsed = JSON.parse(localStorage.getItem(cartStorageKey()) || '[]');
@@ -284,6 +413,8 @@ async function init() {
     if ($('brasilLink')) $('brasilLink').hidden = true;
     if ($('logoHome')) $('logoHome').href = '/brasil';
     document.body.classList.add('brasil-mode');
+    if ($('brasilImport')) $('brasilImport').hidden = false;
+    if ($('cartTitle')) $('cartTitle').textContent = 'Pedido Brasil';
   } else {
     $('userList').textContent = me.priceListName ? `Lista ${me.priceListName}` : 'Sin lista asignada';
     if (currentUser.role === 'admin' && $('brasilLink')) $('brasilLink').hidden = false;
@@ -373,6 +504,23 @@ async function init() {
   $('cartNotes').addEventListener('input', () => {
     cartNotes = $('cartNotes').value.slice(0, 800);
     saveCart();
+  });
+  $('loadDanielaBtn')?.addEventListener('click', async () => {
+    try {
+      await loadDanielaOrder();
+    } catch (err) {
+      showImportMsg(err.message || 'No se pudo cargar el pedido.', false);
+    }
+  });
+  $('importOrderFile')?.addEventListener('change', async () => {
+    const file = $('importOrderFile').files?.[0];
+    $('importOrderFile').value = '';
+    if (!file) return;
+    try {
+      await importOrderFromFile(file);
+    } catch (err) {
+      showImportMsg(err.message || 'No se pudo importar el CSV.', false);
+    }
   });
   $('textBigger').addEventListener('click', () => bumpTextScale(1));
   $('textSmaller').addEventListener('click', () => bumpTextScale(-1));

@@ -555,6 +555,7 @@ app.set('trust proxy', 1);
 app.use(express.json({ limit: '8mb' }));
 app.use(cookieSession);
 
+app.use('/orders', express.static(path.join(ROOT, 'orders')));
 app.use('/assets/uploads', express.static(UPLOADS_DIR));
 app.use('/assets', express.static(path.join(ROOT, 'assets')));
 app.use('/pdfs', express.static(path.join(ROOT, 'pdfs')));

@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=10">
+  <link rel="stylesheet" href="/styles.css?v=11">
 </head>
 <body>
   <div class="topbar">
@@ -164,6 +164,17 @@
         <button id="closeCart" class="btn btn-ghost" type="button">Cerrar</button>
       </div>
       <div id="cartItems" class="cart-items"></div>
+      <div id="brasilImport" class="cart-import" hidden>
+        <p class="cart-import-title">Importar pedido</p>
+        <div class="cart-import-actions">
+          <button id="loadDanielaBtn" class="btn btn-ghost" type="button">Cargar pedido Daniela Almeida</button>
+          <label class="btn btn-ghost cart-import-file">
+            Importar CSV
+            <input id="importOrderFile" type="file" accept=".csv,text/csv" hidden>
+          </label>
+        </div>
+        <p id="importOrderMsg" class="cart-form-msg" hidden></p>
+      </div>
       <div class="cart-notes">
         <label for="cartNotes">Notas del pedido</label>
         <textarea id="cartNotes" maxlength="800" placeholder="Ej: entregar el martes, mix de colores, facturar a..."></textarea>
@@ -185,6 +196,6 @@
   </div>
 
   <script src="/js/common.js?v=4"></script>
-  <script src="/app.js?v=9"></script>
+  <script src="/app.js?v=10"></script>
 </body>
 </html>
