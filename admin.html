@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Administración | Lupo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css?v=6">
+</head>
+<body>
+  <div class="topbar">
+    <span>Panel administrador</span>
+    <span>Productos · Listas · Usuarios</span>
+  </div>
+  <header class="site-header admin-header">
+    <div class="header-row">
+      <a href="/admin"><img src="/logo.svg" alt="Lupo" class="logo-img"></a>
+      <div>
+        <h1 style="margin:0;font-size:18px;">Administración</h1>
+        <p class="muted" style="margin:4px 0 0;font-size:13px;" id="adminUserLabel">—</p>
+      </div>
+      <div class="header-actions">
+        <a class="btn btn-ghost" href="/">Ver catálogo</a>
+        <button id="logoutBtn" class="btn btn-black" type="button">Salir</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <p id="flash" class="flash" hidden></p>
+    <div class="admin-tabs">
+      <button type="button" data-tab="products" class="active">Productos</button>
+      <button type="button" data-tab="lists">Listas de precios</button>
+        <button type="button" data-tab="users">Usuarios</button>
+        <button type="button" data-tab="settings">WhatsApp</button>
+    </div>
+
+    <section id="panel-products" class="panel active">
+      <div class="toolbar">
+        <input id="productSearch" placeholder="Buscar código, nombre o catálogo">
+        <select id="productCatalogFilter">
+          <option value="">Todos los catálogos</option>
+        </select>
+        <button id="publishFiltered" class="btn btn-black" type="button">Publicar filtrados</button>
+        <button id="hideFiltered" class="btn btn-ghost" type="button">Ocultar filtrados</button>
+        <select id="bulkBadge">
+          <option value="">Sin etiqueta</option>
+          <option value="promo">Promoción</option>
+          <option value="last">Últimas unidades</option>
+          <option value="sale">Liquidación</option>
+        </select>
+        <button id="applyBulkBadge" class="btn btn-ghost" type="button">Aplicar etiqueta a filtrados</button>
+        <span class="muted" id="productStats"></span>
+      </div>
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th><input id="selectAllProducts" type="checkbox"></th>
+              <th></th>
+              <th>Código</th>
+              <th>Producto</th>
+              <th>Catálogo</th>
+              <th>FOB</th>
+              <th>Etiqueta</th>
+              <th>Visible</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="productRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="panel-lists" class="panel">
+      <form id="newListForm" class="list-form">
+        <div class="field">
+          <label for="newListName">Nueva lista</label>
+          <input id="newListName" placeholder="Ej: Distribuidores" required>
+        </div>
+        <button class="btn btn-black" type="submit">Crear lista</button>
+      </form>
+      <div class="toolbar">
+        <select id="listSelect"></select>
+        <input id="listRename" placeholder="Nombre de la lista">
+        <button id="renameListBtn" class="btn btn-ghost" type="button">Renombrar</button>
+        <button id="deleteListBtn" class="btn btn-ghost" type="button">Eliminar lista</button>
+        <input id="priceSearch" placeholder="Filtrar productos de la lista">
+        <select id="priceCatalogFilter">
+          <option value="">Todos los catálogos</option>
+        </select>
+        <input id="bulkPrice" placeholder="Precio ARS para filtrados">
+        <button id="applyBulkPrice" class="btn btn-ghost" type="button">Aplicar a filtrados</button>
+        <button id="savePricesBtn" class="btn btn-red" type="button">Guardar precios</button>
+        <span class="muted" id="listStats"></span>
+      </div>
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Código</th>
+              <th>Producto</th>
+              <th>FOB</th>
+              <th>Precio ARS</th>
+            </tr>
+          </thead>
+          <tbody id="priceRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="panel-users" class="panel">
+      <form id="userForm" class="user-form">
+        <div class="field">
+          <label for="userNameInput">Nombre</label>
+          <input id="userNameInput" placeholder="Nombre visible">
+        </div>
+        <div class="field">
+          <label for="userUsername">Usuario</label>
+          <input id="userUsername" required>
+        </div>
+        <div class="field">
+          <label for="userPassword">Contraseña</label>
+          <input id="userPassword" type="password" required>
+        </div>
+        <div class="field">
+          <label for="userRole">Rol</label>
+          <select id="userRole">
+            <option value="cliente">Cliente</option>
+            <option value="admin">Administrador</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="userList">Lista de precios</label>
+          <select id="userList" required></select>
+        </div>
+        <button class="btn btn-black" type="submit">Crear usuario</button>
+      </form>
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Usuario</th>
+              <th>Nombre</th>
+              <th>Rol</th>
+              <th>Lista</th>
+              <th>Nueva clave</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="userRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="panel-settings" class="panel">
+      <form id="settingsForm" class="list-form" style="grid-template-columns: 1fr auto;">
+        <div class="field">
+          <label for="whatsappNumber">Tu WhatsApp para recibir pedidos</label>
+          <input id="whatsappNumber" inputmode="tel" placeholder="54911..." required>
+          <p class="muted" style="margin:6px 0 0;font-size:12px;">Con código de país, sin +. Ejemplo Argentina: 54911xxxxxxx. El cliente toca Enviar y te llega el chat con el Excel.</p>
+        </div>
+        <button class="btn btn-black" type="submit">Guardar WhatsApp</button>
+      </form>
+    </section>
+  </main>
+
+  <div id="productEditor" class="editor-drawer" hidden>
+    <div class="editor-backdrop" data-close-editor></div>
+    <aside class="editor-panel" role="dialog" aria-labelledby="editorTitle">
+      <div class="cart-panel-head">
+        <div>
+          <h2 id="editorTitle">Editar producto</h2>
+          <p id="editorCode" class="muted">—</p>
+        </div>
+        <button id="closeEditor" class="btn btn-ghost" type="button">Cerrar</button>
+      </div>
+      <div class="editor-body">
+        <div class="editor-preview">
+          <img id="editorImage" alt="Foto del producto">
+        </div>
+        <div class="field">
+          <label for="editorName">Título</label>
+          <input id="editorName" maxlength="120" placeholder="Nombre del producto">
+        </div>
+        <button id="restoreNameBtn" class="btn btn-ghost" type="button">Usar título original</button>
+        <div class="field">
+          <label for="editorFile">Cambiar foto</label>
+          <input id="editorFile" type="file" accept="image/jpeg,image/png,image/webp">
+          <p class="muted" style="margin:6px 0 0;font-size:12px;">JPG, PNG o WEBP. Máximo 6 MB.</p>
+        </div>
+        <button id="restoreImageBtn" class="btn btn-ghost" type="button">Usar foto original</button>
+        <div class="field">
+          <label for="editorBadge">Etiqueta</label>
+          <select id="editorBadge">
+            <option value="">Sin etiqueta</option>
+            <option value="promo">Promoción</option>
+            <option value="last">Últimas unidades</option>
+            <option value="sale">Liquidación</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="editorBadgeText">Texto de la tarjetita (opcional)</label>
+          <input id="editorBadgeText" maxlength="40" placeholder="Ej: 30% OFF, 2x1, Pack x3">
+        </div>
+        <button id="saveEditorBtn" class="btn btn-red" type="button">Guardar cambios</button>
+      </div>
+    </aside>
+  </div>
+
+  <script src="/js/common.js?v=4"></script>
+  <script src="/js/admin.js?v=6"></script>
+</body>
+</html>

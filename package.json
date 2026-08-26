@@ -1,0 +1,13 @@
+{
+  "name": "catalogo-lupo-b2b",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Catálogo B2B Lupo con usuarios, listas de precios y panel de administración.",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "express-session": "^1.18.2"
+  }
+}
