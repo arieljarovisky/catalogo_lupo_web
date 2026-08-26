@@ -252,6 +252,7 @@ function setMeta(id, patch) {
   if (!current.name) delete current.name;
   if (!current.badge) delete current.badge;
   if (!current.badgeText) delete current.badgeText;
+  if (!Number.isFinite(current.sortOrder)) delete current.sortOrder;
   if (current.colorImages && typeof current.colorImages === 'object') {
     const cleaned = {};
     for (const [code, image] of Object.entries(current.colorImages)) {
@@ -395,6 +396,13 @@ function parseBadgeText(raw) {
   return String(raw || '').trim().slice(0, 40);
 }
 
+function parseSortOrder(raw) {
+  if (raw == null || raw === '') return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return undefined;
+  return Math.max(0, Math.min(999999, Math.round(n)));
+}
+
 function productAdminView(p) {
   const meta = getMeta(p.id);
   const published = new Set(db.publishedIds);
@@ -414,6 +422,7 @@ function productAdminView(p) {
     colors: resolvedColors(p),
     badge: meta.badge || '',
     badgeText: meta.badgeText || '',
+    sortOrder: Number.isFinite(meta.sortOrder) ? meta.sortOrder : null,
     fobUsd: p.fobUsd ?? null,
     published: published.has(p.id)
   };
@@ -460,6 +469,7 @@ function catalogProduct(p, priceArs, { includeFob = false } = {}) {
     tech: p.tech || [],
     badge: meta.badge || '',
     badgeText: meta.badgeText || '',
+    sortOrder: Number.isFinite(meta.sortOrder) ? meta.sortOrder : null,
     priceArs: Number.isFinite(priceArs) ? priceArs : null
   };
   if (includeFob) item.fobUsd = Number.isFinite(p.fobUsd) ? p.fobUsd : null;
@@ -958,6 +968,11 @@ app.patch('/api/admin/products/:id', requireAdmin, async (req, res) => {
   if (req.body?.name != null) {
     const name = parseName(req.body.name);
     patch.name = !name || name === p.name ? '' : name;
+  }
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, 'sortOrder')) {
+    const sortOrder = parseSortOrder(req.body.sortOrder);
+    if (sortOrder === undefined) return res.status(400).json({ error: 'Orden inválido' });
+    patch.sortOrder = sortOrder == null ? null : sortOrder;
   }
   setMeta(p.id, patch);
   await saveDb(db);

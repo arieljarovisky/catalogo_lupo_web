@@ -753,6 +753,13 @@ body.brasil-mode .topbar span:nth-child(2) { font-weight: 800; }
 .mini-tag.tag-last { background: #111; }
 .mini-tag.tag-sale { background: #c45c00; }
 .admin-table select { min-width: 150px; }
+.admin-table .sort-order-input {
+  width: 72px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: #fff;
+}
 
 .editor-drawer {
   position: fixed;

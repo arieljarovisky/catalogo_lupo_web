@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=14">
+  <link rel="stylesheet" href="/styles.css?v=15">
 </head>
 <body>
   <div class="topbar">
@@ -68,6 +68,7 @@
             <tr>
               <th><input id="selectAllProducts" type="checkbox"></th>
               <th></th>
+              <th title="Menor número = aparece antes">Orden</th>
               <th>Código</th>
               <th>Producto</th>
               <th>Catálogo</th>
@@ -241,12 +242,17 @@
           <label for="editorBadgeText">Texto de la tarjetita (opcional)</label>
           <input id="editorBadgeText" maxlength="40" placeholder="Ej: 30% OFF, 2x1, Pack x3">
         </div>
+        <div class="field">
+          <label for="editorSortOrder">Orden en el catálogo</label>
+          <input id="editorSortOrder" type="number" min="0" step="1" inputmode="numeric" placeholder="Vacío = al final">
+          <p class="muted" style="margin:6px 0 0;font-size:12px;">Menor número aparece primero. Con etiqueta “Promoción” entra en la solapa Promociones.</p>
+        </div>
         <button id="saveEditorBtn" class="btn btn-red" type="button">Guardar cambios</button>
       </div>
     </aside>
   </div>
 
   <script src="/js/common.js?v=4"></script>
-  <script src="/js/admin.js?v=7"></script>
+  <script src="/js/admin.js?v=8"></script>
 </body>
 </html>

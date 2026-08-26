@@ -1,10 +1,11 @@
 const { escapeHtml, translateText, normalizeText, formatArs, formatFob, api, logout, catalogLabel, PRODUCT_BADGES, badgeInfo, badgeLabel } = window.LupoCommon;
 
-const state = { search: '', codes: '', catalog: '', category: '', size: '', color: '', badge: '', view: 'grid' };
+const state = { search: '', codes: '', catalog: '', category: '', size: '', color: '', badge: '', view: 'grid', promos: false };
 const $ = id => document.getElementById(id);
 const SURTIDO_SIZE = 'Surtido';
 const SURTIDO_COLOR = 'SURTIDO';
 const SURTIDO_COLOR_NAME = 'Colores surtido';
+const PROMOS_NAV = '__promos__';
 const TEXT_SCALES = ['md', 'lg', 'xl'];
 const brasilMode = (() => {
   const path = (location.pathname || '/').replace(/\/+$/, '') || '/';
@@ -179,20 +180,30 @@ async function restoreModalPhoto() {
   showCartMsg('Se restauró la foto original.');
 }
 function selectCatalog(catalogName) {
-  $('catalogFilter').value = catalogName || '';
-  setActiveCatalog(catalogName || '');
+  if (catalogName === PROMOS_NAV) {
+    state.promos = true;
+    $('catalogFilter').value = '';
+    setActiveCatalog(PROMOS_NAV);
+  } else {
+    state.promos = false;
+    $('catalogFilter').value = catalogName || '';
+    setActiveCatalog(catalogName || '');
+  }
   syncState();
   render();
 }
 function setActiveCatalog(catalogName) {
   document.querySelectorAll('#mainNav [data-catalog]').forEach(btn => {
-    btn.classList.toggle('active', (btn.dataset.catalog || '') === (catalogName || ''));
+    const key = btn.dataset.catalog || '';
+    const active = state.promos ? key === PROMOS_NAV : key === (catalogName || '') && key !== PROMOS_NAV;
+    btn.classList.toggle('active', active);
   });
 }
 function buildCatalogNav(catalogs) {
   const nav = $('mainNav');
   if (!nav) return;
   nav.innerHTML = `<button type="button" data-catalog="" class="active">Todos</button>` +
+    `<button type="button" data-catalog="${PROMOS_NAV}">Promociones</button>` +
     catalogs.map(c => `<button type="button" data-catalog="${escapeHtml(c.catalog)}">${escapeHtml(catalogLabel(c.catalog))}</button>`).join('');
   nav.querySelectorAll('[data-catalog]').forEach(btn => {
     btn.addEventListener('click', () => selectCatalog(btn.dataset.catalog || ''));
@@ -497,6 +508,7 @@ async function init() {
   });
   ['search', 'codes', 'catalogFilter', 'categoryFilter', 'sizeFilter', 'colorFilter', 'badgeFilter'].forEach(id => {
     $(id).addEventListener('input', () => {
+      if (id === 'catalogFilter') state.promos = false;
       syncState();
       if (id === 'catalogFilter') setActiveCatalog(state.catalog);
       render();
@@ -595,8 +607,10 @@ function syncState() {
   state.size = $('sizeFilter').value;
   state.color = $('colorFilter').value;
   state.badge = $('badgeFilter') ? $('badgeFilter').value : '';
+  if (state.catalog) state.promos = false;
 }
 function resetFilters() {
+  state.promos = false;
   ['search', 'codes', 'catalogFilter', 'categoryFilter', 'sizeFilter', 'colorFilter', 'badgeFilter'].forEach(id => { if ($(id)) $(id).value = ''; });
   setActiveCatalog('');
   syncState();
@@ -619,13 +633,18 @@ function filtered() {
     const blob = normalizeText([translatedBlob, p.code, p.name, p.category, p.catalog, p.sizes, p.description, ...(p.tech || []), (p.colors || []).map(c => `${c.code} ${c.name}`).join(' ')].join(' '));
     if (q && !blob.includes(q)) return false;
     if (wantedCodes.length && !wantedCodes.some(c => normalizeText(p.code).includes(c))) return false;
-    if (state.catalog && p.catalog !== state.catalog) return false;
+    if (state.promos) {
+      if (p.badge !== 'promo') return false;
+    } else if (state.catalog && p.catalog !== state.catalog) return false;
     if (state.category && p.category !== state.category) return false;
     if (state.size && !normalizeText(p.sizes).includes(normalizeText(state.size))) return false;
     if (state.color && !(p.colors || []).some(c => normalizeText(colorLabel(c)).includes(wantedColor))) return false;
     if (state.badge && p.badge !== state.badge) return false;
     return true;
   }).sort((a, b) => {
+    const ao = Number.isFinite(a.sortOrder) ? a.sortOrder : Number.POSITIVE_INFINITY;
+    const bo = Number.isFinite(b.sortOrder) ? b.sortOrder : Number.POSITIVE_INFINITY;
+    if (ao !== bo) return ao - bo;
     const aw = a.badge ? 0 : 1;
     const bw = b.badge ? 0 : 1;
     if (aw !== bw) return aw - bw;

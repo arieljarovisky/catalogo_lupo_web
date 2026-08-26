@@ -40,6 +40,11 @@ function filteredProducts() {
     if (fob === 'without' && Number.isFinite(p.fobUsd)) return false;
     const blob = normalizeText([p.code, translateText(p.name), catalogLabel(p.catalog), p.catalog, p.category].join(' '));
     return !q || blob.includes(q);
+  }).sort((a, b) => {
+    const ao = Number.isFinite(a.sortOrder) ? a.sortOrder : Number.POSITIVE_INFINITY;
+    const bo = Number.isFinite(b.sortOrder) ? b.sortOrder : Number.POSITIVE_INFINITY;
+    if (ao !== bo) return ao - bo;
+    return String(a.code || '').localeCompare(String(b.code || ''), undefined, { numeric: true });
   });
 }
 
@@ -74,10 +79,12 @@ function renderProducts() {
   $('productStats').textContent = `${published} publicados · ${rows.length} en vista · ${products.length} totales · ${withFob} con FOB`;
   $('productRows').innerHTML = rows.map(p => {
     const href = pdfHref(p);
+    const orderVal = Number.isFinite(p.sortOrder) ? p.sortOrder : '';
     return `
     <tr data-product="${escapeHtml(p.id)}">
       <td><input type="checkbox" data-id="${escapeHtml(p.id)}" ${p.published ? 'checked' : ''}></td>
       <td><button class="thumb-edit" type="button" data-edit="${escapeHtml(p.id)}" title="Editar foto"><img class="thumb-mini" src="${escapeHtml(adminImage(p))}" alt=""></button></td>
+      <td><input class="sort-order-input" type="number" min="0" step="1" inputmode="numeric" data-sort="${escapeHtml(p.id)}" value="${escapeHtml(String(orderVal))}" placeholder="—" title="Menor número = aparece antes"></td>
       <td><b>${escapeHtml(p.code)}</b></td>
       <td>${escapeHtml(translateText(p.name))}</td>
       <td>${escapeHtml(catalogLabel(p.catalog))}</td>
@@ -126,6 +133,7 @@ function fillEditor(p) {
   $('editorName').value = p.name || '';
   $('editorBadge').value = p.badge || '';
   $('editorBadgeText').value = p.badgeText || '';
+  if ($('editorSortOrder')) $('editorSortOrder').value = Number.isFinite(p.sortOrder) ? p.sortOrder : '';
   $('restoreImageBtn').disabled = !p.hasCustomImage;
   $('restoreNameBtn').disabled = !p.hasCustomName;
   renderEditorColors(p);
@@ -315,6 +323,19 @@ async function init() {
       setVisibility([box.dataset.id], box.checked).catch(err => showFlash(err.message, true));
       return;
     }
+    const sortInput = e.target.closest('input[data-sort]');
+    if (sortInput) {
+      const raw = sortInput.value.trim();
+      const sortOrder = raw === '' ? null : Number(raw);
+      api(`/api/admin/products/${sortInput.dataset.sort}`, { method: 'PATCH', body: { sortOrder } })
+        .then(data => {
+          upsertProduct(data.product);
+          renderProducts();
+          showFlash('Orden actualizado.');
+        })
+        .catch(err => showFlash(err.message, true));
+      return;
+    }
     const badgeSel = e.target.closest('select[data-badge]');
     if (!badgeSel) return;
     api(`/api/admin/products/${badgeSel.dataset.badge}`, { method: 'PATCH', body: { badge: badgeSel.value } })
@@ -434,7 +455,8 @@ async function init() {
         body: {
           name,
           badge: $('editorBadge').value,
-          badgeText: $('editorBadgeText').value
+          badgeText: $('editorBadgeText').value,
+          sortOrder: $('editorSortOrder')?.value.trim() === '' ? null : Number($('editorSortOrder').value)
         }
       });
       upsertProduct(data.product);
