@@ -3,3 +3,7 @@ db.json
 *.tmp
 orders/
 tmp_pdf_text/
+.env
+.env.local
+.env*.local
+

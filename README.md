@@ -13,6 +13,8 @@ npm start
 
 Después abrí [http://localhost:3000](http://localhost:3000).
 
+Sin variables de Supabase, en local usa `db.json` y `assets/uploads/`.
+
 ## Accesos iniciales
 
 - Administrador: `admin` / `admin123`
@@ -30,13 +32,40 @@ Cambiá estas claves desde el panel de usuarios.
 
 Los datos de ficha se extraen de los PDF en `pdfs/nuevos-catalogos/` (Boxers y slips, Lencería y Medias 2026).
 
-## Vercel
+## Supabase (producción)
 
-El frontend se sirve estático. El login y las APIs (`/api/...`) van por `server.js` a través de `api/index.js`.
+En Vercel hace falta Supabase para que usuarios, precios, fotos y pedidos **persistan**.
 
-En el proyecto de Vercel, agregá:
+### 1. Crear el schema
 
-- `SESSION_SECRET`: texto largo y aleatorio (sin eso las sesiones pueden invalidarse entre deploys).
-- `BLOB_READ_WRITE_TOKEN`: creá un store en **Storage → Blob** y conectalo al proyecto. Sin esto, cambiar fotos en Admin falla en producción (el disco de la función es efímero).
+En Supabase → **SQL Editor**, ejecutá el contenido de [`supabase/schema.sql`](supabase/schema.sql).
 
-En Vercel el `db.json` vive en `/tmp`: usuarios, precios y overrides de imagen editados en Admin **no persisten** entre cold starts. Para producción hace falta una base externa; las URLs de Blob sí quedan públicas, pero la referencia en `productMeta` se pierde si el `db.json` se reinicia.
+Eso crea:
+
+- tabla `app_state` (estado del catálogo, equivalente a `db.json`)
+- tabla `orders` (excels de pedidos)
+- bucket público `uploads` (fotos custom)
+
+### 2. Variables de entorno
+
+En Vercel (y opcionalmente en local):
+
+| Variable | Dónde |
+|---|---|
+| `SUPABASE_URL` | Project URL |
+| `SUPABASE_SECRET_KEY` | API Keys → secret (`sb_secret_...`) — solo backend |
+| `SESSION_SECRET` | texto largo y aleatorio |
+
+También acepta el nombre legacy `SUPABASE_SERVICE_ROLE_KEY` (JWT `eyJ...`).
+
+Nunca expongas la secret key en el frontend.
+
+### 3. Migrar el `db.json` actual
+
+```
+SUPABASE_URL=... SUPABASE_SECRET_KEY=... npm run migrate:supabase
+```
+
+### 4. Redeploy
+
+Después del deploy, cambiar fotos, precios y usuarios queda guardado en Supabase.

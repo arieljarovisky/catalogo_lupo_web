@@ -12,7 +12,7 @@
   ],
   "functions": {
     "api/index.js": {
-      "includeFiles": "{data.js,agosto-2026-capital-prices.json,multilupo-prices.json,catalogs.json,index.html,admin.html,login.html,pedido-brasil.html,styles.css,app.js,logo.svg,js/**,orders/**}",
+      "includeFiles": "{data.js,agosto-2026-capital-prices.json,multilupo-prices.json,catalogs.json,index.html,admin.html,login.html,pedido-brasil.html,styles.css,app.js,logo.svg,js/**,lib/**,orders/**}",
       "excludeFiles": "{pdfs,tmp_pdf_text}/**"
     }
   }

@@ -3,7 +3,15 @@ const path = require('path');
 const vm = require('vm');
 const crypto = require('crypto');
 const express = require('express');
-const { put: putBlob, del: delBlob } = require('@vercel/blob');
+const {
+  USE_SUPABASE,
+  fetchAppState,
+  upsertAppState,
+  uploadPublicFile,
+  removePublicFile,
+  saveOrder,
+  getOrder
+} = require('./lib/supabase');
 
 const ROOT = __dirname;
 const IS_VERCEL = Boolean(process.env.VERCEL);
@@ -13,8 +21,10 @@ const UPLOADS_DIR = IS_VERCEL ? path.join('/tmp', 'uploads') : path.join(ROOT, '
 const ORDERS_DIR = path.join(DATA_DIR, 'orders');
 const PORT = Number(process.env.PORT) || 3000;
 const BADGE_IDS = new Set(['promo', 'last', 'sale']);
-const BLOB_TOKEN = process.env.BLOB_READ_WRITE_TOKEN || '';
-const USE_BLOB = Boolean(BLOB_TOKEN);
+
+if (IS_VERCEL && !USE_SUPABASE) {
+  console.warn('Faltan SUPABASE_URL y SUPABASE_SECRET_KEY: en Vercel la data no va a persistir.');
+}
 
 function loadProducts() {
   const code = fs.readFileSync(path.join(ROOT, 'data.js'), 'utf8');
@@ -95,27 +105,22 @@ function seedDb() {
   };
 }
 
-function loadDb() {
-  if (!fs.existsSync(DB_PATH)) {
-    const seeded = seedDb();
-    saveDb(seeded);
-    return seeded;
-  }
-  const parsed = JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
-  parsed.publishedIds = Array.isArray(parsed.publishedIds) ? parsed.publishedIds : [];
-  parsed.priceLists = Array.isArray(parsed.priceLists) ? parsed.priceLists : [];
-  parsed.users = Array.isArray(parsed.users) ? parsed.users : [];
-  parsed.productMeta = parsed.productMeta && typeof parsed.productMeta === 'object' ? parsed.productMeta : {};
-  parsed.settings = parsed.settings && typeof parsed.settings === 'object' ? parsed.settings : {};
-  if (typeof parsed.settings.whatsappNumber !== 'string') parsed.settings.whatsappNumber = '';
-  if (!parsed.sessionSecret) parsed.sessionSecret = crypto.randomBytes(24).toString('hex');
+function normalizeDb(parsed) {
+  const data = parsed && typeof parsed === 'object' ? parsed : seedDb();
+  data.publishedIds = Array.isArray(data.publishedIds) ? data.publishedIds : [];
+  data.priceLists = Array.isArray(data.priceLists) ? data.priceLists : [];
+  data.users = Array.isArray(data.users) ? data.users : [];
+  data.productMeta = data.productMeta && typeof data.productMeta === 'object' ? data.productMeta : {};
+  data.settings = data.settings && typeof data.settings === 'object' ? data.settings : {};
+  if (typeof data.settings.whatsappNumber !== 'string') data.settings.whatsappNumber = '';
+  if (!data.sessionSecret) data.sessionSecret = crypto.randomBytes(24).toString('hex');
   const validIds = new Set(PRODUCTS.map(p => p.id));
-  parsed.publishedIds = parsed.publishedIds.filter(id => validIds.has(id));
-  for (const id of Object.keys(parsed.productMeta)) {
-    if (!validIds.has(id)) delete parsed.productMeta[id];
+  data.publishedIds = data.publishedIds.filter(id => validIds.has(id));
+  for (const id of Object.keys(data.productMeta)) {
+    if (!validIds.has(id)) delete data.productMeta[id];
   }
-  if (!parsed.publishedIds.length) parsed.publishedIds = defaultPublishedIds();
-  for (const list of parsed.priceLists) {
+  if (!data.publishedIds.length) data.publishedIds = defaultPublishedIds();
+  for (const list of data.priceLists) {
     if (!list.prices || typeof list.prices !== 'object') list.prices = {};
     for (const id of Object.keys(list.prices)) {
       if (!validIds.has(id)) delete list.prices[id];
@@ -123,7 +128,7 @@ function loadDb() {
   }
   const agostoPath = path.join(ROOT, 'agosto-2026-capital-prices.json');
   const seedPath = fs.existsSync(agostoPath) ? agostoPath : path.join(ROOT, 'multilupo-prices.json');
-  const mayorista = parsed.priceLists.find(l => l.id === 'lista-mayorista') || parsed.priceLists[0];
+  const mayorista = data.priceLists.find(l => l.id === 'lista-mayorista') || data.priceLists[0];
   if (mayorista && Object.keys(mayorista.prices).length === 0 && fs.existsSync(seedPath)) {
     const seed = JSON.parse(fs.readFileSync(seedPath, 'utf8'));
     for (const [id, price] of Object.entries(seed)) {
@@ -131,22 +136,82 @@ function loadDb() {
     }
     if (fs.existsSync(agostoPath)) mayorista.name = 'Agosto 2026 Capital';
   }
-  saveDb(parsed);
-  return parsed;
+  if (!data.users.length) {
+    const seeded = seedDb();
+    data.users = seeded.users;
+    if (!data.priceLists.length) data.priceLists = seeded.priceLists;
+  }
+  return data;
 }
 
-function saveDb(data) {
+function loadDbFromFile() {
+  if (!fs.existsSync(DB_PATH)) return normalizeDb(seedDb());
+  return normalizeDb(JSON.parse(fs.readFileSync(DB_PATH, 'utf8')));
+}
+
+function saveDbToFile(data) {
+  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+  const tmp = `${DB_PATH}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf8');
+  fs.renameSync(tmp, DB_PATH);
+}
+
+async function loadDb() {
+  if (USE_SUPABASE) {
+    const remote = await fetchAppState();
+    const data = normalizeDb(remote || seedDb());
+    if (!remote) await upsertAppState(data);
+    return data;
+  }
+  if (IS_VERCEL) {
+    throw new Error('Configurá SUPABASE_URL y SUPABASE_SECRET_KEY en Vercel.');
+  }
+  const data = loadDbFromFile();
+  saveDbToFile(data);
+  return data;
+}
+
+async function saveDb(data) {
+  db = data;
   try {
-    fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-    const tmp = `${DB_PATH}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf8');
-    fs.renameSync(tmp, DB_PATH);
+    if (USE_SUPABASE) {
+      await upsertAppState(data);
+      return;
+    }
+    if (IS_VERCEL) {
+      console.warn('saveDb: sin Supabase en Vercel, no se persistió.');
+      return;
+    }
+    saveDbToFile(data);
   } catch (err) {
-    console.warn('No se pudo guardar db.json:', err.message);
+    console.warn('No se pudo guardar la base:', err.message);
+    throw err;
   }
 }
 
-let db = loadDb();
+let db = seedDb();
+const dbReady = loadDb()
+  .then(data => {
+    db = data;
+    return db;
+  })
+  .catch(err => {
+    console.error('No se pudo cargar la base:', err.message);
+    throw err;
+  });
+
+async function ensureDb(req, res, next) {
+  try {
+    await dbReady;
+    next();
+  } catch (err) {
+    console.error(err);
+    if (req.path.startsWith('/api/')) {
+      return res.status(503).json({ error: 'Base de datos no disponible. Revisá Supabase.' });
+    }
+    res.status(503).send('Base de datos no disponible. Revisá SUPABASE_URL y SUPABASE_SECRET_KEY.');
+  }
+}
 
 function getUserById(id) {
   return db.users.find(u => u.id === id) || null;
@@ -254,15 +319,10 @@ async function saveDataUrl(productId, dataUrl, suffix = '') {
   const safeSuffix = String(suffix || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40);
   const filename = `${safeId}${safeSuffix ? `-${safeSuffix}` : ''}-${Date.now()}.${ext}`;
 
-  if (USE_BLOB) {
+  if (USE_SUPABASE) {
     try {
-      const blob = await putBlob(`uploads/${filename}`, buf, {
-        access: 'public',
-        contentType,
-        addRandomSuffix: false,
-        token: BLOB_TOKEN
-      });
-      return { path: blob.url };
+      const url = await uploadPublicFile(filename, buf, contentType);
+      return { path: url };
     } catch (err) {
       return { error: `No se pudo guardar la imagen: ${err.message}` };
     }
@@ -270,7 +330,7 @@ async function saveDataUrl(productId, dataUrl, suffix = '') {
 
   if (IS_VERCEL) {
     return {
-      error: 'En Vercel las fotos necesitan BLOB_READ_WRITE_TOKEN (Storage → Blob). Sin eso el archivo no se puede servir.'
+      error: 'En Vercel las fotos necesitan Supabase Storage (SUPABASE_URL + SUPABASE_SECRET_KEY).'
     };
   }
 
@@ -288,8 +348,8 @@ async function deleteUpload(relPath) {
   const rel = String(relPath || '').replace(/\\/g, '/');
   if (!rel) return;
   if (/^https?:\/\//i.test(rel)) {
-    if (!USE_BLOB) return;
-    try { await delBlob(rel, { token: BLOB_TOKEN }); } catch {}
+    if (!USE_SUPABASE) return;
+    try { await removePublicFile(rel); } catch {}
     return;
   }
   if (!rel.startsWith('assets/uploads/')) return;
@@ -298,6 +358,31 @@ async function deleteUpload(relPath) {
   if (abs.startsWith(UPLOADS_DIR) && fs.existsSync(abs)) {
     try { fs.unlinkSync(abs); } catch {}
   }
+}
+
+async function persistOrder(token, filename, xml) {
+  if (USE_SUPABASE) {
+    await saveOrder(token, filename, xml);
+    return;
+  }
+  if (IS_VERCEL) {
+    throw new Error('Pedidos en Vercel requieren Supabase.');
+  }
+  fs.mkdirSync(ORDERS_DIR, { recursive: true });
+  fs.writeFileSync(path.join(ORDERS_DIR, `${token}.xls`), xml, 'utf8');
+}
+
+async function readOrder(token) {
+  if (USE_SUPABASE) {
+    return getOrder(token);
+  }
+  const file = path.join(ORDERS_DIR, `${token}.xls`);
+  if (!fs.existsSync(file)) return null;
+  return {
+    token,
+    filename: 'pedido-lupo.xls',
+    content: fs.readFileSync(file, 'utf8')
+  };
 }
 
 function parseBadge(raw) {
@@ -589,6 +674,7 @@ const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', 1);
 app.use(express.json({ limit: '8mb' }));
+app.use(ensureDb);
 app.use(cookieSession);
 
 app.use('/orders', express.static(path.join(ROOT, 'orders')));
@@ -641,7 +727,7 @@ app.get('/api/admin/settings', requireAdmin, (req, res) => {
   });
 });
 
-app.patch('/api/admin/settings', requireAdmin, (req, res) => {
+app.patch('/api/admin/settings', requireAdmin, async (req, res) => {
   const raw = String(req.body?.whatsappNumber || '').trim();
   const digits = raw.replace(/\D/g, '');
   if (raw && !normalizeWhatsapp(digits)) {
@@ -649,11 +735,12 @@ app.patch('/api/admin/settings', requireAdmin, (req, res) => {
   }
   db.settings = db.settings || {};
   db.settings.whatsappNumber = digits;
-  saveDb(db);
+  await saveDb(db);
   res.json({ whatsappNumber: db.settings.whatsappNumber });
 });
 
-app.post('/api/orders', requireAuth, (req, res) => {
+app.post('/api/orders', requireAuth, async (req, res) => {
+  try {
   const incoming = Array.isArray(req.body?.items) ? req.body.items : [];
   const notes = String(req.body?.notes || '').trim().slice(0, 800);
   if (!incoming.length) return res.status(400).json({ error: 'El pedido está vacío.' });
@@ -683,8 +770,7 @@ app.post('/api/orders', requireAuth, (req, res) => {
     items,
     notes
   });
-  fs.mkdirSync(ORDERS_DIR, { recursive: true });
-  fs.writeFileSync(path.join(ORDERS_DIR, `${token}.xls`), xml, 'utf8');
+  await persistOrder(token, filename, xml);
   const excelUrl = `${publicBaseUrl(req)}/pedido/${token}`;
   const qtyTotal = items.reduce((sum, item) => sum + item.qty, 0);
   const moneyTotal = items.reduce((sum, item) => sum + (Number.isFinite(item.priceArs) ? item.priceArs * item.qty : 0), 0);
@@ -711,16 +797,25 @@ app.post('/api/orders', requireAuth, (req, res) => {
     message,
     xml
   });
+  } catch (err) {
+    console.error('POST /api/orders', err);
+    res.status(500).json({ error: err.message || 'No se pudo guardar el pedido.' });
+  }
 });
 
-function sendOrderExcel(req, res) {
-  const token = String(req.params.token || '').replace(/[^a-f0-9]/gi, '');
-  if (token.length < 16) return res.status(404).end();
-  const file = path.join(ORDERS_DIR, `${token}.xls`);
-  if (!fs.existsSync(file)) return res.status(404).end();
-  res.setHeader('Content-Type', 'application/vnd.ms-excel; charset=utf-8');
-  res.setHeader('Content-Disposition', 'attachment; filename="pedido-lupo.xls"');
-  res.sendFile(file);
+async function sendOrderExcel(req, res) {
+  try {
+    const token = String(req.params.token || '').replace(/[^a-f0-9]/gi, '');
+    if (token.length < 16) return res.status(404).end();
+    const order = await readOrder(token);
+    if (!order?.content) return res.status(404).end();
+    res.setHeader('Content-Type', 'application/vnd.ms-excel; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${order.filename || 'pedido-lupo.xls'}"`);
+    res.send(order.content);
+  } catch (err) {
+    console.error('sendOrderExcel', err);
+    res.status(500).end();
+  }
 }
 
 app.get('/pedido/:token', sendOrderExcel);
@@ -749,7 +844,8 @@ app.get('/api/admin/catalog-brasil', requireAdmin, (req, res) => {
   });
 });
 
-app.post('/api/admin/orders-brasil', requireAdmin, (req, res) => {
+app.post('/api/admin/orders-brasil', requireAdmin, async (req, res) => {
+  try {
   const incoming = Array.isArray(req.body?.items) ? req.body.items : [];
   const notes = String(req.body?.notes || '').trim().slice(0, 800);
   if (!incoming.length) return res.status(400).json({ error: 'El pedido está vacío.' });
@@ -780,8 +876,7 @@ app.post('/api/admin/orders-brasil', requireAdmin, (req, res) => {
     notes,
     currency: 'USD'
   });
-  fs.mkdirSync(ORDERS_DIR, { recursive: true });
-  fs.writeFileSync(path.join(ORDERS_DIR, `${token}.xls`), xml, 'utf8');
+  await persistOrder(token, filename, xml);
   const excelUrl = `${publicBaseUrl(req)}/pedido/${token}`;
   const qtyTotal = items.reduce((sum, item) => sum + item.qty, 0);
   const moneyTotal = items.reduce((sum, item) => sum + (Number.isFinite(item.fobUsd) ? item.fobUsd * item.qty : 0), 0);
@@ -808,6 +903,10 @@ app.post('/api/admin/orders-brasil', requireAdmin, (req, res) => {
     message,
     xml
   });
+  } catch (err) {
+    console.error('POST /api/admin/orders-brasil', err);
+    res.status(500).json({ error: err.message || 'No se pudo guardar el pedido.' });
+  }
 });
 
 app.get('/api/admin/products', requireAdmin, (req, res) => {
@@ -820,7 +919,7 @@ app.get('/api/admin/catalogs', requireAdmin, (req, res) => {
   res.json({ catalogs: adminCatalogSummaries() });
 });
 
-app.patch('/api/admin/products/visibility', requireAdmin, (req, res) => {
+app.patch('/api/admin/products/visibility', requireAdmin, async (req, res) => {
   const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : [];
   const published = Boolean(req.body?.published);
   const valid = new Set(ids.filter(id => PRODUCT_BY_ID.has(id)));
@@ -828,11 +927,11 @@ app.patch('/api/admin/products/visibility', requireAdmin, (req, res) => {
   if (published) valid.forEach(id => current.add(id));
   else valid.forEach(id => current.delete(id));
   db.publishedIds = PRODUCTS.map(p => p.id).filter(id => current.has(id));
-  saveDb(db);
+  await saveDb(db);
   res.json({ publishedCount: db.publishedIds.length });
 });
 
-app.patch('/api/admin/products/badges', requireAdmin, (req, res) => {
+app.patch('/api/admin/products/badges', requireAdmin, async (req, res) => {
   const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : [];
   const badge = parseBadge(req.body?.badge);
   if (badge == null) return res.status(400).json({ error: 'Etiqueta inválida' });
@@ -841,11 +940,11 @@ app.patch('/api/admin/products/badges', requireAdmin, (req, res) => {
     if (!PRODUCT_BY_ID.has(id)) continue;
     setMeta(id, { badge, badgeText: badge ? badgeText : '' });
   }
-  saveDb(db);
+  await saveDb(db);
   res.json({ ok: true });
 });
 
-app.patch('/api/admin/products/:id', requireAdmin, (req, res) => {
+app.patch('/api/admin/products/:id', requireAdmin, async (req, res) => {
   const p = PRODUCT_BY_ID.get(req.params.id);
   if (!p) return res.status(404).json({ error: 'Producto no encontrado' });
   const patch = {};
@@ -861,7 +960,7 @@ app.patch('/api/admin/products/:id', requireAdmin, (req, res) => {
     patch.name = !name || name === p.name ? '' : name;
   }
   setMeta(p.id, patch);
-  saveDb(db);
+  await saveDb(db);
   res.json({ product: productAdminView(p) });
 });
 
@@ -873,7 +972,7 @@ app.post('/api/admin/products/:id/image', requireAdmin, async (req, res) => {
     if (saved.error) return res.status(400).json({ error: saved.error });
     await deleteUpload(getMeta(p.id).image);
     setMeta(p.id, { image: saved.path });
-    saveDb(db);
+    await saveDb(db);
     res.json({ product: productAdminView(p) });
   } catch (err) {
     console.error('POST product image', err);
@@ -887,7 +986,7 @@ app.delete('/api/admin/products/:id/image', requireAdmin, async (req, res) => {
     if (!p) return res.status(404).json({ error: 'Producto no encontrado' });
     await deleteUpload(getMeta(p.id).image);
     setMeta(p.id, { image: '' });
-    saveDb(db);
+    await saveDb(db);
     res.json({ product: productAdminView(p) });
   } catch (err) {
     console.error('DELETE product image', err);
@@ -907,7 +1006,7 @@ app.post('/api/admin/products/:id/colors/:code/image', requireAdmin, async (req,
     const prev = (getMeta(p.id).colorImages || {})[code];
     await deleteUpload(prev);
     setColorImage(p.id, code, saved.path);
-    saveDb(db);
+    await saveDb(db);
     res.json({ product: productAdminView(p) });
   } catch (err) {
     console.error('POST color image', err);
@@ -925,7 +1024,7 @@ app.delete('/api/admin/products/:id/colors/:code/image', requireAdmin, async (re
     const prev = (getMeta(p.id).colorImages || {})[code];
     await deleteUpload(prev);
     setColorImage(p.id, code, '');
-    saveDb(db);
+    await saveDb(db);
     res.json({ product: productAdminView(p) });
   } catch (err) {
     console.error('DELETE color image', err);
@@ -955,26 +1054,26 @@ app.get('/api/admin/lists/:id', requireAdmin, (req, res) => {
   });
 });
 
-app.post('/api/admin/lists', requireAdmin, (req, res) => {
+app.post('/api/admin/lists', requireAdmin, async (req, res) => {
   const name = String(req.body?.name || '').trim();
   if (!name) return res.status(400).json({ error: 'El nombre es obligatorio' });
   const list = { id: uid(), name, prices: {} };
   db.priceLists.push(list);
-  saveDb(db);
+  await saveDb(db);
   res.json({ list: { id: list.id, name: list.name, pricedCount: 0 } });
 });
 
-app.patch('/api/admin/lists/:id', requireAdmin, (req, res) => {
+app.patch('/api/admin/lists/:id', requireAdmin, async (req, res) => {
   const list = getListById(req.params.id);
   if (!list) return res.status(404).json({ error: 'Lista no encontrada' });
   const name = String(req.body?.name || '').trim();
   if (!name) return res.status(400).json({ error: 'El nombre es obligatorio' });
   list.name = name;
-  saveDb(db);
+  await saveDb(db);
   res.json({ list: { id: list.id, name: list.name } });
 });
 
-app.delete('/api/admin/lists/:id', requireAdmin, (req, res) => {
+app.delete('/api/admin/lists/:id', requireAdmin, async (req, res) => {
   if (db.priceLists.length <= 1) {
     return res.status(400).json({ error: 'Tiene que quedar al menos una lista' });
   }
@@ -985,11 +1084,11 @@ app.delete('/api/admin/lists/:id', requireAdmin, (req, res) => {
     if (user.priceListId === req.params.id) user.priceListId = fallback.id;
   });
   db.priceLists.splice(index, 1);
-  saveDb(db);
+  await saveDb(db);
   res.json({ ok: true });
 });
 
-app.patch('/api/admin/lists/:id/prices', requireAdmin, (req, res) => {
+app.patch('/api/admin/lists/:id/prices', requireAdmin, async (req, res) => {
   const list = getListById(req.params.id);
   if (!list) return res.status(404).json({ error: 'Lista no encontrada' });
   if (!list.prices) list.prices = {};
@@ -1000,7 +1099,7 @@ app.patch('/api/admin/lists/:id/prices', requireAdmin, (req, res) => {
     if (price == null) delete list.prices[productId];
     else list.prices[productId] = price;
   }
-  saveDb(db);
+  await saveDb(db);
   res.json({
     pricedCount: Object.values(list.prices).filter(v => Number.isFinite(v)).length
   });
@@ -1015,7 +1114,7 @@ app.get('/api/admin/users', requireAdmin, (req, res) => {
   });
 });
 
-app.post('/api/admin/users', requireAdmin, (req, res) => {
+app.post('/api/admin/users', requireAdmin, async (req, res) => {
   const username = String(req.body?.username || '').trim().toLowerCase();
   const name = String(req.body?.name || '').trim() || username;
   const password = String(req.body?.password || '');
@@ -1039,11 +1138,11 @@ app.post('/api/admin/users', requireAdmin, (req, res) => {
     priceListId
   };
   db.users.push(user);
-  saveDb(db);
+  await saveDb(db);
   res.json({ user: publicUser(user) });
 });
 
-app.patch('/api/admin/users/:id', requireAdmin, (req, res) => {
+app.patch('/api/admin/users/:id', requireAdmin, async (req, res) => {
   const user = getUserById(req.params.id);
   if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
   if (req.body?.name != null) user.name = String(req.body.name).trim() || user.username;
@@ -1068,11 +1167,11 @@ app.patch('/api/admin/users/:id', requireAdmin, (req, res) => {
     if (password.length < 4) return res.status(400).json({ error: 'La contraseña es demasiado corta' });
     user.passwordHash = hashPassword(password);
   }
-  saveDb(db);
+  await saveDb(db);
   res.json({ user: publicUser(user) });
 });
 
-app.delete('/api/admin/users/:id', requireAdmin, (req, res) => {
+app.delete('/api/admin/users/:id', requireAdmin, async (req, res) => {
   const index = db.users.findIndex(u => u.id === req.params.id);
   if (index === -1) return res.status(404).json({ error: 'Usuario no encontrado' });
   const user = db.users[index];
@@ -1086,16 +1185,24 @@ app.delete('/api/admin/users/:id', requireAdmin, (req, res) => {
     }
   }
   db.users.splice(index, 1);
-  saveDb(db);
+  await saveDb(db);
   res.json({ ok: true });
 });
 
 if (require.main === module) {
-  app.listen(PORT, () => {
-    console.log(`Catálogo Lupo B2B en http://localhost:${PORT}`);
-    console.log('Admin: admin / admin123');
-    console.log('Cliente: cliente / cliente123');
-  });
+  dbReady
+    .then(() => {
+      app.listen(PORT, () => {
+        console.log(`Catálogo Lupo B2B en http://localhost:${PORT}`);
+        console.log(USE_SUPABASE ? 'Persistencia: Supabase' : 'Persistencia: db.json local');
+        console.log('Admin: admin / admin123');
+        console.log('Cliente: cliente / cliente123');
+      });
+    })
+    .catch(err => {
+      console.error(err);
+      process.exit(1);
+    });
 }
 
 module.exports = app;
