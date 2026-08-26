@@ -364,6 +364,28 @@ button, input, select, textarea { font: inherit; }
   position: relative;
 }
 .modal-img img { width: 100%; height: 100%; max-height: 92vh; object-fit: contain; object-position: center; }
+.modal-photo-edit {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, .92);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .12);
+}
+.modal-photo-edit .btn { min-height: 40px; padding: 8px 12px; font-size: 13px; }
+.modal-photo-hint {
+  margin: 0;
+  flex: 1 1 100%;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
 .modal-body { padding: 28px; overflow: auto; min-height: 0; max-height: 92vh; }
 .modal-body h3 { margin: 0 0 8px; font-size: 26px; line-height: 1.15; }
 .modal-code { font-weight: 800; color: var(--muted); margin-bottom: 8px; }
@@ -716,6 +738,59 @@ html[data-text="xl"] .search-box input { font-size: 18px; padding: 16px; }
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+.editor-colors {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.editor-color-card {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 10px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+}
+.editor-color-thumb {
+  width: 64px;
+  height: 64px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #f3f3f3;
+  display: grid;
+  place-items: center;
+}
+.editor-color-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.editor-color-empty {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  text-align: center;
+  padding: 4px;
+}
+.editor-color-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.editor-color-info strong { font-size: 14px; }
+.editor-color-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.editor-color-upload {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
 }
 
 @media (max-width: 1100px) {

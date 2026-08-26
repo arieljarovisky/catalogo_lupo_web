@@ -58,6 +58,98 @@ function assetUrl(src) {
 function colorPhoto(c) {
   return assetUrl(c && c.image);
 }
+function isAdmin() {
+  return currentUser?.role === 'admin';
+}
+function selectedColorCode() {
+  const code = $('cartColor')?.value || '';
+  if (!code || code === SURTIDO_COLOR || code === '-') return '';
+  return code;
+}
+function syncModalPhotoEdit() {
+  const wrap = $('modalPhotoEdit');
+  if (!wrap) return;
+  if (!isAdmin() || !modalProduct) {
+    wrap.hidden = true;
+    return;
+  }
+  wrap.hidden = false;
+  const code = selectedColorCode();
+  const color = code ? (modalProduct.colors || []).find(c => String(c.code) === code) : null;
+  const hint = $('modalPhotoHint');
+  const restore = $('modalRestorePhotoBtn');
+  if (color) {
+    hint.textContent = `Foto del color: ${colorLabel(color)}`;
+    restore.hidden = !color.hasCustomImage;
+  } else {
+    hint.textContent = 'Foto principal del producto';
+    restore.hidden = !modalProduct.hasCustomImage;
+  }
+}
+function applyProductUpdate(updated) {
+  if (!updated?.id) return;
+  const idx = products.findIndex(p => p.id === updated.id);
+  if (idx < 0) return;
+  const prev = products[idx];
+  products[idx] = {
+    ...prev,
+    image: updated.image || prev.image,
+    name: updated.name || prev.name,
+    hasCustomImage: Boolean(updated.hasCustomImage),
+    colors: (updated.colors || prev.colors || []).map(c => ({
+      code: c.code,
+      name: c.name,
+      image: c.image,
+      hasCustomImage: Boolean(c.hasCustomImage)
+    })),
+    badge: updated.badge != null ? updated.badge : prev.badge,
+    badgeText: updated.badgeText != null ? updated.badgeText : prev.badgeText
+  };
+  if (modalProduct?.id === updated.id) {
+    modalProduct = products[idx];
+    const code = selectedColorCode();
+    const color = code ? modalProduct.colors.find(c => String(c.code) === code) : null;
+    $('modalImage').src = colorPhoto(color) || productImage(modalProduct);
+    $('cartColorChips').querySelectorAll('.choice-chip').forEach(btn => {
+      if (btn.dataset.color === SURTIDO_COLOR) return;
+      const match = modalProduct.colors.find(c => String(c.code) === btn.dataset.color);
+      if (match) btn.dataset.image = colorPhoto(match) || '';
+    });
+    syncModalPhotoEdit();
+  }
+  render();
+}
+async function readImageFile(file) {
+  if (!file) throw new Error('Elegí una imagen.');
+  if (file.size > 6 * 1024 * 1024) throw new Error('La imagen no puede superar 6 MB.');
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('No se pudo leer el archivo'));
+    reader.readAsDataURL(file);
+  });
+}
+async function uploadModalPhoto(file) {
+  if (!modalProduct || !isAdmin()) return;
+  const dataUrl = await readImageFile(file);
+  const code = selectedColorCode();
+  const url = code
+    ? `/api/admin/products/${modalProduct.id}/colors/${encodeURIComponent(code)}/image`
+    : `/api/admin/products/${modalProduct.id}/image`;
+  const data = await api(url, { method: 'POST', body: { dataUrl } });
+  applyProductUpdate(data.product);
+  showCartMsg(code ? 'Foto del color actualizada.' : 'Foto del producto actualizada.');
+}
+async function restoreModalPhoto() {
+  if (!modalProduct || !isAdmin()) return;
+  const code = selectedColorCode();
+  const url = code
+    ? `/api/admin/products/${modalProduct.id}/colors/${encodeURIComponent(code)}/image`
+    : `/api/admin/products/${modalProduct.id}/image`;
+  const data = await api(url, { method: 'DELETE' });
+  applyProductUpdate(data.product);
+  showCartMsg('Se restauró la foto original.');
+}
 function selectCatalog(catalogName) {
   $('catalogFilter').value = catalogName || '';
   setActiveCatalog(catalogName || '');
@@ -202,6 +294,24 @@ async function init() {
   $('addToCartForm').addEventListener('submit', onAddToCart);
   $('cartSizeChips').addEventListener('click', e => onChipClick(e, 'size'));
   $('cartColorChips').addEventListener('click', e => onChipClick(e, 'color'));
+  $('modalChangePhotoBtn')?.addEventListener('click', () => $('modalPhotoFile')?.click());
+  $('modalPhotoFile')?.addEventListener('change', async () => {
+    const file = $('modalPhotoFile').files[0];
+    $('modalPhotoFile').value = '';
+    if (!file) return;
+    try {
+      await uploadModalPhoto(file);
+    } catch (err) {
+      showCartMsg(err.message || 'No se pudo actualizar la foto.', false);
+    }
+  });
+  $('modalRestorePhotoBtn')?.addEventListener('click', async () => {
+    try {
+      await restoreModalPhoto();
+    } catch (err) {
+      showCartMsg(err.message || 'No se pudo restaurar la foto.', false);
+    }
+  });
   $('addToCartForm').addEventListener('click', e => {
     const step = e.target.closest('[data-qty-step]');
     if (!step) return;
@@ -369,6 +479,7 @@ function selectColor(code, name) {
       $('modalImage').src = (chip && chip.dataset.image) || productImage(modalProduct);
     }
   }
+  syncModalPhotoEdit();
 }
 function onChipClick(e, kind) {
   const btn = e.target.closest('.choice-chip');
@@ -404,6 +515,7 @@ function openModal(id) {
     <tr><td>Colores</td><td>${colorNames.map(n => escapeHtml(n)).join(' · ') || 'No detectado'}</td></tr>
     <tr><td>Tecnología</td><td>${(p.tech || []).map(t => escapeHtml(translateText(t))).join(' · ') || 'No detectado'}</td></tr>
     <tr><td>Origen</td><td>${p.pdf ? `<a href="${p.pdf.startsWith('http') ? p.pdf : `${p.pdf}#page=${p.page}`}" target="_blank">Ver catálogo${p.page ? `, página ${p.page}` : ''}</a>` : '—'}</td></tr>`;
+  syncModalPhotoEdit();
   $('modal').classList.add('open');
 }
 function closeModal() {

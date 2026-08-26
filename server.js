@@ -179,6 +179,16 @@ function setMeta(id, patch) {
   if (!current.name) delete current.name;
   if (!current.badge) delete current.badge;
   if (!current.badgeText) delete current.badgeText;
+  if (current.colorImages && typeof current.colorImages === 'object') {
+    const cleaned = {};
+    for (const [code, image] of Object.entries(current.colorImages)) {
+      if (image) cleaned[code] = image;
+    }
+    if (Object.keys(cleaned).length) current.colorImages = cleaned;
+    else delete current.colorImages;
+  } else {
+    delete current.colorImages;
+  }
   if (!Object.keys(current).length) delete db.productMeta[id];
   else db.productMeta[id] = current;
   return db.productMeta[id] || {};
@@ -194,6 +204,29 @@ function parseName(raw) {
 
 function resolvedImage(p) {
   return getMeta(p.id).image || p.image;
+}
+
+function resolvedColors(p) {
+  const overrides = getMeta(p.id).colorImages || {};
+  return (p.colors || []).map(c => {
+    const code = String(c.code || '');
+    const custom = overrides[code];
+    return {
+      code: c.code,
+      name: c.name,
+      image: custom || c.image || '',
+      originalImage: c.image || '',
+      hasCustomImage: Boolean(custom)
+    };
+  });
+}
+
+function setColorImage(id, colorCode, imagePath) {
+  const meta = getMeta(id);
+  const colorImages = { ...(meta.colorImages || {}) };
+  if (imagePath) colorImages[colorCode] = imagePath;
+  else delete colorImages[colorCode];
+  return setMeta(id, { colorImages });
 }
 
 function deleteUpload(relPath) {
@@ -215,7 +248,7 @@ function parseBadgeText(raw) {
   return String(raw || '').trim().slice(0, 40);
 }
 
-function saveDataUrl(productId, dataUrl) {
+function saveDataUrl(productId, dataUrl, suffix = '') {
   const match = String(dataUrl || '').match(/^data:(image\/(jpeg|jpg|png|webp));base64,([A-Za-z0-9+/=\s]+)$/i);
   if (!match) return { error: 'Usá una imagen JPG, PNG o WEBP.' };
   const ext = match[2].toLowerCase() === 'jpeg' || match[2].toLowerCase() === 'jpg' ? 'jpg' : match[2].toLowerCase();
@@ -224,7 +257,8 @@ function saveDataUrl(productId, dataUrl) {
   if (buf.length > 6 * 1024 * 1024) return { error: 'La imagen no puede superar 6 MB.' };
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
   const safeId = String(productId).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80) || 'producto';
-  const rel = `assets/uploads/${safeId}-${Date.now()}.${ext}`;
+  const safeSuffix = String(suffix || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40);
+  const rel = `assets/uploads/${safeId}${safeSuffix ? `-${safeSuffix}` : ''}-${Date.now()}.${ext}`;
   fs.writeFileSync(path.join(ROOT, rel), buf);
   return { path: rel };
 }
@@ -243,6 +277,7 @@ function productAdminView(p) {
     image: resolvedImage(p),
     originalImage: p.image,
     hasCustomImage: Boolean(meta.image),
+    colors: resolvedColors(p),
     badge: meta.badge || '',
     badgeText: meta.badgeText || '',
     fobUsd: p.fobUsd ?? null,
@@ -284,7 +319,8 @@ function catalogProduct(p, priceArs) {
     pdf: p.pdf,
     page: p.page,
     image: resolvedImage(p),
-    colors: p.colors || [],
+    hasCustomImage: Boolean(meta.image),
+    colors: resolvedColors(p).map(({ code, name, image, hasCustomImage }) => ({ code, name, image, hasCustomImage })),
     sizes: p.sizes || '',
     description: p.description || '',
     tech: p.tech || [],
@@ -676,6 +712,34 @@ app.delete('/api/admin/products/:id/image', requireAdmin, (req, res) => {
   if (!p) return res.status(404).json({ error: 'Producto no encontrado' });
   deleteUpload(getMeta(p.id).image);
   setMeta(p.id, { image: '' });
+  saveDb(db);
+  res.json({ product: productAdminView(p) });
+});
+
+app.post('/api/admin/products/:id/colors/:code/image', requireAdmin, (req, res) => {
+  const p = PRODUCT_BY_ID.get(req.params.id);
+  if (!p) return res.status(404).json({ error: 'Producto no encontrado' });
+  const code = String(req.params.code || '').trim();
+  const color = (p.colors || []).find(c => String(c.code) === code);
+  if (!color) return res.status(404).json({ error: 'Color no encontrado' });
+  const saved = saveDataUrl(p.id, req.body?.dataUrl, code);
+  if (saved.error) return res.status(400).json({ error: saved.error });
+  const prev = (getMeta(p.id).colorImages || {})[code];
+  deleteUpload(prev);
+  setColorImage(p.id, code, saved.path);
+  saveDb(db);
+  res.json({ product: productAdminView(p) });
+});
+
+app.delete('/api/admin/products/:id/colors/:code/image', requireAdmin, (req, res) => {
+  const p = PRODUCT_BY_ID.get(req.params.id);
+  if (!p) return res.status(404).json({ error: 'Producto no encontrado' });
+  const code = String(req.params.code || '').trim();
+  const color = (p.colors || []).find(c => String(c.code) === code);
+  if (!color) return res.status(404).json({ error: 'Color no encontrado' });
+  const prev = (getMeta(p.id).colorImages || {})[code];
+  deleteUpload(prev);
+  setColorImage(p.id, code, '');
   saveDb(db);
   res.json({ product: productAdminView(p) });
 });

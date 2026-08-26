@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=7">
+  <link rel="stylesheet" href="/styles.css?v=8">
 </head>
 <body>
   <div class="topbar">
@@ -108,7 +108,16 @@
   <div id="modal" class="modal">
     <button id="closeModal" class="close" aria-label="Cerrar">×</button>
     <div class="modal-card">
-      <div class="modal-img"><img id="modalImage" alt="Imagen del producto"><span id="modalOffer" class="offer-tag" hidden></span></div>
+      <div class="modal-img">
+        <img id="modalImage" alt="Imagen del producto">
+        <span id="modalOffer" class="offer-tag" hidden></span>
+        <div id="modalPhotoEdit" class="modal-photo-edit" hidden>
+          <button type="button" class="btn btn-black" id="modalChangePhotoBtn">Cambiar foto</button>
+          <button type="button" class="btn btn-ghost" id="modalRestorePhotoBtn" hidden>Foto original</button>
+          <input id="modalPhotoFile" type="file" accept="image/jpeg,image/png,image/webp" hidden>
+          <p id="modalPhotoHint" class="modal-photo-hint">Foto del producto</p>
+        </div>
+      </div>
       <div class="modal-body">
         <div id="modalCode" class="modal-code"></div>
         <h3 id="modalTitle"></h3>
@@ -174,6 +183,6 @@
   </div>
 
   <script src="/js/common.js?v=4"></script>
-  <script src="/app.js?v=7"></script>
+  <script src="/app.js?v=8"></script>
 </body>
 </html>

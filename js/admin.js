@@ -88,6 +88,39 @@ function fillEditor(p) {
   $('editorBadgeText').value = p.badgeText || '';
   $('restoreImageBtn').disabled = !p.hasCustomImage;
   $('restoreNameBtn').disabled = !p.hasCustomName;
+  renderEditorColors(p);
+}
+
+function colorLabelAdmin(c) {
+  const name = translateText(c.name || '').trim();
+  if (name) return name;
+  const code = String(c.code || '').trim();
+  return !code || code === '-' ? 'Sin color' : code;
+}
+
+function renderEditorColors(p) {
+  const wrap = $('editorColorPhotos');
+  if (!wrap) return;
+  const colors = p.colors || [];
+  if (!colors.length) {
+    wrap.innerHTML = '<p class="muted" style="margin:0;font-size:13px;">Sin colores cargados.</p>';
+    return;
+  }
+  wrap.innerHTML = colors.map(c => {
+    const src = c.image || '';
+    const img = src ? `<img src="${escapeHtml(src)}" alt="">` : '<span class="editor-color-empty">Sin foto</span>';
+    return `<article class="editor-color-card" data-color-code="${escapeHtml(c.code)}">
+      <div class="editor-color-thumb">${img}</div>
+      <div class="editor-color-info">
+        <strong>${escapeHtml(colorLabelAdmin(c))}</strong>
+        <span class="muted">${escapeHtml(c.code || '')}</span>
+        <div class="editor-color-actions">
+          <label class="btn btn-ghost editor-color-upload">Cambiar<input type="file" accept="image/jpeg,image/png,image/webp" data-color-file="${escapeHtml(c.code)}" hidden></label>
+          <button type="button" class="btn btn-ghost" data-color-restore="${escapeHtml(c.code)}" ${c.hasCustomImage ? '' : 'disabled'}>Original</button>
+        </div>
+      </div>
+    </article>`;
+  }).join('');
 }
 
 function openEditor(id) {
@@ -290,6 +323,43 @@ async function init() {
       showFlash('Foto actualizada.');
     } catch (err) { showFlash(err.message, true); }
     $('editorFile').value = '';
+  });
+  $('editorColorPhotos')?.addEventListener('change', async e => {
+    const input = e.target.closest('[data-color-file]');
+    if (!input || !editingId) return;
+    const file = input.files?.[0];
+    const code = input.dataset.colorFile;
+    input.value = '';
+    if (!file || !code) return;
+    if (file.size > 6 * 1024 * 1024) return showFlash('La imagen no puede superar 6 MB.', true);
+    try {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('No se pudo leer el archivo'));
+        reader.readAsDataURL(file);
+      });
+      const data = await api(`/api/admin/products/${editingId}/colors/${encodeURIComponent(code)}/image`, {
+        method: 'POST',
+        body: { dataUrl }
+      });
+      upsertProduct(data.product);
+      renderProducts();
+      showFlash('Foto del color actualizada.');
+    } catch (err) { showFlash(err.message, true); }
+  });
+  $('editorColorPhotos')?.addEventListener('click', async e => {
+    const btn = e.target.closest('[data-color-restore]');
+    if (!btn || !editingId || btn.disabled) return;
+    const code = btn.dataset.colorRestore;
+    try {
+      const data = await api(`/api/admin/products/${editingId}/colors/${encodeURIComponent(code)}/image`, {
+        method: 'DELETE'
+      });
+      upsertProduct(data.product);
+      renderProducts();
+      showFlash('Se restauró la foto original del color.');
+    } catch (err) { showFlash(err.message, true); }
   });
   $('restoreNameBtn').addEventListener('click', async () => {
     if (!editingId) return;
