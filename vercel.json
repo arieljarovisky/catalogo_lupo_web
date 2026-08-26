@@ -1,0 +1,13 @@
+{
+  "cleanUrls": true,
+  "rewrites": [
+    { "source": "/pedido/:token", "destination": "/api" },
+    { "source": "/api/:path*", "destination": "/api" }
+  ],
+  "functions": {
+    "api/index.js": {
+      "includeFiles": "{data.js,agosto-2026-capital-prices.json,multilupo-prices.json}",
+      "excludeFiles": "{pdfs,assets,tmp_pdf_text}/**"
+    }
+  }
+}

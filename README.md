@@ -29,3 +29,11 @@ Cambiá estas claves desde el panel de usuarios.
 - Pedido con talle, color y cantidad, exportable a Excel con precios en pesos.
 
 Los datos de ficha se extraen de los PDF en `pdfs/nuevos-catalogos/` (Boxers y slips, Lencería y Medias 2026).
+
+## Vercel
+
+El frontend se sirve estático. El login y las APIs (`/api/...`) van por `server.js` a través de `api/index.js`.
+
+En el proyecto de Vercel, agregá la variable de entorno `SESSION_SECRET` (un texto largo y aleatorio). Sin eso, las sesiones pueden invalidarse entre deploys.
+
+En Vercel el `db.json` vive en `/tmp`: usuarios y precios editados en Admin **no persisten** entre cold starts. Para producción hace falta una base externa.

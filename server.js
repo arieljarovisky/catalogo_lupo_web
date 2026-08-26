@@ -3,12 +3,13 @@ const path = require('path');
 const vm = require('vm');
 const crypto = require('crypto');
 const express = require('express');
-const session = require('express-session');
 
 const ROOT = __dirname;
-const DB_PATH = path.join(ROOT, 'db.json');
-const UPLOADS_DIR = path.join(ROOT, 'assets', 'uploads');
-const ORDERS_DIR = path.join(ROOT, 'orders');
+const IS_VERCEL = Boolean(process.env.VERCEL);
+const DATA_DIR = IS_VERCEL ? '/tmp' : ROOT;
+const DB_PATH = path.join(DATA_DIR, 'db.json');
+const UPLOADS_DIR = IS_VERCEL ? path.join('/tmp', 'uploads') : path.join(ROOT, 'assets', 'uploads');
+const ORDERS_DIR = path.join(DATA_DIR, 'orders');
 const PORT = Number(process.env.PORT) || 3000;
 const BADGE_IDS = new Set(['promo', 'last', 'sale']);
 
@@ -61,12 +62,12 @@ function seedDb() {
     publishedIds: PRODUCTS.map(p => p.id),
     productMeta: {},
     priceLists: [
-      { id: mayoristaId, name: 'Mayorista', prices: {} },
+      { id: mayoristaId, name: 'Agosto 2026 Capital', prices: {} },
       { id: minoristaId, name: 'Minorista', prices: {} }
     ],
     users: [
       {
-        id: uid(),
+        id: 'user-admin',
         username: 'admin',
         name: 'Administrador',
         passwordHash: hashPassword('admin123'),
@@ -74,7 +75,7 @@ function seedDb() {
         priceListId: mayoristaId
       },
       {
-        id: uid(),
+        id: 'user-cliente',
         username: 'cliente',
         name: 'Cliente demo',
         passwordHash: hashPassword('cliente123'),
@@ -112,28 +113,43 @@ function loadDb() {
       if (!validIds.has(id)) delete list.prices[id];
     }
   }
-  const seedPath = path.join(ROOT, 'multilupo-prices.json');
+  const agostoPath = path.join(ROOT, 'agosto-2026-capital-prices.json');
+  const seedPath = fs.existsSync(agostoPath) ? agostoPath : path.join(ROOT, 'multilupo-prices.json');
   const mayorista = parsed.priceLists.find(l => l.id === 'lista-mayorista') || parsed.priceLists[0];
   if (mayorista && Object.keys(mayorista.prices).length === 0 && fs.existsSync(seedPath)) {
     const seed = JSON.parse(fs.readFileSync(seedPath, 'utf8'));
     for (const [id, price] of Object.entries(seed)) {
       if (validIds.has(id) && Number.isFinite(price)) mayorista.prices[id] = price;
     }
+    if (fs.existsSync(agostoPath)) mayorista.name = 'Agosto 2026 Capital';
   }
   saveDb(parsed);
   return parsed;
 }
 
 function saveDb(data) {
-  const tmp = `${DB_PATH}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf8');
-  fs.renameSync(tmp, DB_PATH);
+  try {
+    fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+    const tmp = `${DB_PATH}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf8');
+    fs.renameSync(tmp, DB_PATH);
+  } catch (err) {
+    console.warn('No se pudo guardar db.json:', err.message);
+  }
 }
 
 let db = loadDb();
 
 function getUserById(id) {
   return db.users.find(u => u.id === id) || null;
+}
+
+function getSessionUser(req) {
+  const username = req.session?.username;
+  if (username) {
+    return db.users.find(u => u.username.toLowerCase() === String(username).toLowerCase()) || null;
+  }
+  return getUserById(req.session?.userId);
 }
 
 function getListById(id) {
@@ -354,9 +370,9 @@ function normalizeWhatsapp(raw) {
 }
 
 function requireAuth(req, res, next) {
-  const user = getUserById(req.session.userId);
+  const user = getSessionUser(req);
   if (!user) {
-    req.session.userId = null;
+    req.session = {};
     return res.status(401).json({ error: 'No autenticado' });
   }
   req.user = user;
@@ -372,27 +388,81 @@ function requireAdmin(req, res, next) {
 
 function sendHtmlIfAuth(file, role) {
   return (req, res) => {
-    const user = getUserById(req.session.userId);
+    const user = getSessionUser(req);
     if (!user) return res.redirect('/login');
     if (role && user.role !== role) return res.redirect('/');
     res.sendFile(path.join(ROOT, file));
   };
 }
 
+function sessionSecret() {
+  if (process.env.SESSION_SECRET) return process.env.SESSION_SECRET;
+  if (IS_VERCEL) return 'lupo-vercel-change-SESSION_SECRET';
+  return db.sessionSecret || 'lupo-dev-secret';
+}
+
+function parseCookies(header) {
+  const out = {};
+  for (const part of String(header || '').split(';')) {
+    const idx = part.indexOf('=');
+    if (idx === -1) continue;
+    const key = part.slice(0, idx).trim();
+    const value = part.slice(idx + 1).trim();
+    if (key) out[key] = decodeURIComponent(value);
+  }
+  return out;
+}
+
+function encodeSession(data) {
+  const payload = Buffer.from(JSON.stringify(data || {})).toString('base64url');
+  const sig = crypto.createHmac('sha256', sessionSecret()).update(payload).digest('base64url');
+  return `${payload}.${sig}`;
+}
+
+function decodeSession(token) {
+  const [payload, sig] = String(token || '').split('.');
+  if (!payload || !sig) return {};
+  const expected = crypto.createHmac('sha256', sessionSecret()).update(payload).digest('base64url');
+  const left = crypto.createHash('sha256').update(sig).digest();
+  const right = crypto.createHash('sha256').update(expected).digest();
+  if (!crypto.timingSafeEqual(left, right)) return {};
+  try {
+    const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function cookieSession(req, res, next) {
+  req.session = decodeSession(parseCookies(req.headers.cookie)['lupo.sid']);
+  const writeCookie = () => {
+    const secure = IS_VERCEL || req.secure || req.get('x-forwarded-proto') === 'https';
+    const flags = `Path=/; HttpOnly; SameSite=Lax${secure ? '; Secure' : ''}`;
+    if (!req.session?.username && !req.session?.userId) {
+      res.append('Set-Cookie', `lupo.sid=; ${flags}; Max-Age=0`);
+      return;
+    }
+    const payload = {
+      username: req.session.username || getUserById(req.session.userId)?.username || null,
+      userId: req.session.userId || null
+    };
+    res.append('Set-Cookie', `lupo.sid=${encodeSession(payload)}; ${flags}; Max-Age=${7 * 24 * 60 * 60}`);
+  };
+  const origJson = res.json.bind(res);
+  const origRedirect = res.redirect.bind(res);
+  const origSendFile = res.sendFile.bind(res);
+  res.json = (...args) => { writeCookie(); return origJson(...args); };
+  res.redirect = (...args) => { writeCookie(); return origRedirect(...args); };
+  res.sendFile = (...args) => { writeCookie(); return origSendFile(...args); };
+  next();
+}
+
 const app = express();
 app.disable('x-powered-by');
+app.set('trust proxy', 1);
 app.use(express.json({ limit: '8mb' }));
-app.use(session({
-  name: 'lupo.sid',
-  secret: db.sessionSecret,
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    httpOnly: true,
-    sameSite: 'lax',
-    maxAge: 7 * 24 * 60 * 60 * 1000
-  }
-}));
+app.use(cookieSession);
 
 app.use('/assets', express.static(path.join(ROOT, 'assets')));
 app.use('/pdfs', express.static(path.join(ROOT, 'pdfs')));
@@ -402,7 +472,7 @@ app.get('/app.js', (req, res) => res.sendFile(path.join(ROOT, 'app.js')));
 app.get('/logo.svg', (req, res) => res.sendFile(path.join(ROOT, 'logo.svg')));
 
 app.get('/login', (req, res) => {
-  const user = getUserById(req.session.userId);
+  const user = getSessionUser(req);
   if (user) return res.redirect(user.role === 'admin' ? '/admin' : '/');
   res.sendFile(path.join(ROOT, 'login.html'));
 });
@@ -416,15 +486,13 @@ app.post('/api/login', (req, res) => {
   if (!user || !verifyPassword(password, user.passwordHash)) {
     return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
   }
-  req.session.userId = user.id;
+  req.session = { username: user.username, userId: user.id };
   res.json({ user: publicUser(user) });
 });
 
 app.post('/api/logout', (req, res) => {
-  req.session.destroy(() => {
-    res.clearCookie('lupo.sid');
-    res.json({ ok: true });
-  });
+  req.session = {};
+  res.json({ ok: true });
 });
 
 app.get('/api/me', requireAuth, (req, res) => {
@@ -514,7 +582,7 @@ app.post('/api/orders', requireAuth, (req, res) => {
   });
 });
 
-app.get('/pedido/:token', (req, res) => {
+function sendOrderExcel(req, res) {
   const token = String(req.params.token || '').replace(/[^a-f0-9]/gi, '');
   if (token.length < 16) return res.status(404).end();
   const file = path.join(ORDERS_DIR, `${token}.xls`);
@@ -522,7 +590,10 @@ app.get('/pedido/:token', (req, res) => {
   res.setHeader('Content-Type', 'application/vnd.ms-excel; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename="pedido-lupo.xls"');
   res.sendFile(file);
-});
+}
+
+app.get('/pedido/:token', sendOrderExcel);
+app.get('/api/pedido/:token', sendOrderExcel);
 
 app.get('/api/catalog', requireAuth, (req, res) => {
   const published = new Set(db.publishedIds);
@@ -766,8 +837,12 @@ app.delete('/api/admin/users/:id', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
-app.listen(PORT, () => {
-  console.log(`Catálogo Lupo B2B en http://localhost:${PORT}`);
-  console.log('Admin: admin / admin123');
-  console.log('Cliente: cliente / cliente123');
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Catálogo Lupo B2B en http://localhost:${PORT}`);
+    console.log('Admin: admin / admin123');
+    console.log('Cliente: cliente / cliente123');
+  });
+}
+
+module.exports = app;
