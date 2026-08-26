@@ -12,7 +12,7 @@
 <body>
   <div class="topbar">
     <span>Panel administrador</span>
-    <span>Productos · Listas · Usuarios</span>
+    <span>Productos · Catálogos · Listas · Usuarios</span>
   </div>
   <header class="site-header admin-header">
     <div class="header-row">
@@ -32,6 +32,7 @@
     <p id="flash" class="flash" hidden></p>
     <div class="admin-tabs">
       <button type="button" data-tab="products" class="active">Productos</button>
+      <button type="button" data-tab="catalogs">Catálogos</button>
       <button type="button" data-tab="lists">Listas de precios</button>
         <button type="button" data-tab="users">Usuarios</button>
         <button type="button" data-tab="settings">WhatsApp</button>
@@ -42,6 +43,11 @@
         <input id="productSearch" placeholder="Buscar código, nombre o catálogo">
         <select id="productCatalogFilter">
           <option value="">Todos los catálogos</option>
+        </select>
+        <select id="productFobFilter">
+          <option value="">FOB: todos</option>
+          <option value="with">Con FOB</option>
+          <option value="without">Sin FOB</option>
         </select>
         <button id="publishFiltered" class="btn btn-black" type="button">Publicar filtrados</button>
         <button id="hideFiltered" class="btn btn-ghost" type="button">Ocultar filtrados</button>
@@ -64,12 +70,35 @@
               <th>Producto</th>
               <th>Catálogo</th>
               <th>FOB</th>
+              <th>PDF</th>
               <th>Etiqueta</th>
               <th>Visible</th>
               <th></th>
             </tr>
           </thead>
           <tbody id="productRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="panel-catalogs" class="panel">
+      <p class="muted" style="margin:0 0 14px;">PDFs del catálogo completo de Brasil y los catálogos locales. Los artículos Brasil traen precio FOB cuando está cargado.</p>
+      <div class="toolbar">
+        <span class="muted" id="catalogStats"></span>
+      </div>
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Catálogo</th>
+              <th>Origen</th>
+              <th>Artículos</th>
+              <th>Con FOB</th>
+              <th>Tamaño</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="catalogRows"></tbody>
         </table>
       </div>
     </section>

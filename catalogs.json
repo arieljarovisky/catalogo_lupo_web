@@ -1,0 +1,98 @@
+[
+  {
+    "id": "cuecas",
+    "name": "Lupo Cuecas PV 2026",
+    "pdf": "pdfs/lupo-cuecas-pv2026.pdf",
+    "origin": "brasil"
+  },
+  {
+    "id": "lingerie",
+    "name": "Lupo Lingerie PV 2026",
+    "pdf": "pdfs/lupo-lingerie-pv2026.pdf",
+    "origin": "brasil"
+  },
+  {
+    "id": "meia-calca",
+    "name": "Lupo Meia-Calça PV 2026",
+    "pdf": "pdfs/lupo-meia-calca-pv2026.pdf",
+    "origin": "brasil"
+  },
+  {
+    "id": "meias-esportivas",
+    "name": "Lupo Meias Esportivas PV 2026",
+    "pdf": "pdfs/lupo-meias-esportivas-pv2026.pdf",
+    "origin": "brasil"
+  },
+  {
+    "id": "meias-femininas",
+    "name": "Lupo Meias Femininas PV 2026",
+    "pdf": "pdfs/lupo-meias-femininas-pv2026.pdf",
+    "origin": "brasil"
+  },
+  {
+    "id": "meias-masculinas",
+    "name": "Lupo Meias Masculinas PV 2026",
+    "pdf": "pdfs/lupo-meias-masculinas-pv2026.pdf",
+    "origin": "brasil"
+  },
+  {
+    "id": "conjuntos",
+    "name": "Lupo Conjuntos PV 27",
+    "pdf": "pdfs/lupo-conjuntos-pv27.pdf",
+    "origin": "brasil"
+  },
+  {
+    "id": "sport",
+    "name": "Lupo Sport Varejo PV 27",
+    "pdf": "pdfs/lupo-sport-varejo-pv27.pdf",
+    "origin": "brasil"
+  },
+  {
+    "id": "beachwear",
+    "name": "Lupo Beachwear PV 2026",
+    "pdf": "pdfs/lupo-beachwear-pv2026.pdf",
+    "origin": "brasil"
+  },
+  {
+    "id": "meias-baby",
+    "name": "Lupo Meias Baby PV 2026",
+    "pdf": "pdfs/lupo-meias-baby-pv2026.pdf",
+    "origin": "brasil"
+  },
+  {
+    "id": "meias-kids",
+    "name": "Lupo Meias Kids PV 2026",
+    "pdf": "pdfs/lupo-meias-kids-pv2026.pdf",
+    "origin": "brasil"
+  },
+  {
+    "id": "kids-seamless",
+    "name": "Lupo Kids Seamless PV 2026",
+    "pdf": "pdfs/lupo-kids-seamless-pv2026.pdf",
+    "origin": "brasil"
+  },
+  {
+    "id": "pijamas",
+    "name": "Lupo Pijamas PV 2026",
+    "pdf": "pdfs/lupo-pijamas-pv2026.pdf",
+    "origin": "brasil"
+  },
+  {
+    "id": "boxers-local",
+    "name": "Boxers y Slips 2026",
+    "pdf": "pdfs/nuevos-catalogos/boxers-slips-2026.pdf",
+    "origin": "local"
+  },
+  {
+    "id": "lenceria-local",
+    "name": "Lencería 2026",
+    "pdf": "pdfs/nuevos-catalogos/lenceria-2026.pdf",
+    "origin": "local"
+  },
+  {
+    "id": "medias-local",
+    "name": "Medias 2026",
+    "pdf": "pdfs/nuevos-catalogos/medias-2026.pdf",
+    "origin": "local"
+  }
+]

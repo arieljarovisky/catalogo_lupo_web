@@ -75,7 +75,20 @@ window.LupoCommon = (() => {
   const CATALOG_LABELS = {
     'Boxers y Slips 2026': 'Boxers y slips',
     'Lencería 2026': 'Lencería',
-    'Medias 2026': 'Medias'
+    'Medias 2026': 'Medias',
+    'Lupo Cuecas PV 2026': 'Cuecas (Brasil)',
+    'Lupo Lingerie PV 2026': 'Lingerie (Brasil)',
+    'Lupo Meia-Calça PV 2026': 'Meia-calça (Brasil)',
+    'Lupo Meias Esportivas PV 2026': 'Medias deportivas (Brasil)',
+    'Lupo Meias Femininas PV 2026': 'Medias femeninas (Brasil)',
+    'Lupo Meias Masculinas PV 2026': 'Medias masculinas (Brasil)',
+    'Lupo Conjuntos PV 27': 'Conjuntos (Brasil)',
+    'Lupo Sport Varejo PV 27': 'Sport (Brasil)',
+    'Lupo Beachwear PV 2026': 'Beachwear (Brasil)',
+    'Lupo Meias Baby PV 2026': 'Medias baby (Brasil)',
+    'Lupo Meias Kids PV 2026': 'Medias kids (Brasil)',
+    'Lupo Kids Seamless PV 2026': 'Kids seamless (Brasil)',
+    'Lupo Pijamas PV 2026': 'Pijamas (Brasil)'
   };
   const PRODUCT_BADGES = {
     promo: { id: 'promo', label: 'Promoción', className: 'tag-promo' },

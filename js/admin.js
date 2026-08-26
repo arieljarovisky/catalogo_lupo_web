@@ -2,6 +2,7 @@ const { escapeHtml, translateText, formatArs, formatFob, parseArs, api, logout, 
 
 const $ = id => document.getElementById(id);
 let products = [];
+let catalogs = [];
 let lists = [];
 let currentListId = '';
 let currentPrices = {};
@@ -23,8 +24,8 @@ function switchTab(tab) {
 }
 
 function fillCatalogFilters() {
-  const catalogs = [...new Set(products.map(p => p.catalog))].sort((a, b) => catalogLabel(a).localeCompare(catalogLabel(b), 'es'));
-  const html = `<option value="">Todos los catálogos</option>` + catalogs.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(catalogLabel(c))}</option>`).join('');
+  const catalogNames = [...new Set(products.map(p => p.catalog))].sort((a, b) => catalogLabel(a).localeCompare(catalogLabel(b), 'es'));
+  const html = `<option value="">Todos los catálogos</option>` + catalogNames.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(catalogLabel(c))}</option>`).join('');
   if ($('productCatalogFilter')) $('productCatalogFilter').innerHTML = html;
   if ($('priceCatalogFilter')) $('priceCatalogFilter').innerHTML = html;
 }
@@ -32,8 +33,11 @@ function fillCatalogFilters() {
 function filteredProducts() {
   const q = normalizeText($('productSearch').value);
   const catalog = $('productCatalogFilter')?.value || '';
+  const fob = $('productFobFilter')?.value || '';
   return products.filter(p => {
     if (catalog && p.catalog !== catalog) return false;
+    if (fob === 'with' && !Number.isFinite(p.fobUsd)) return false;
+    if (fob === 'without' && Number.isFinite(p.fobUsd)) return false;
     const blob = normalizeText([p.code, translateText(p.name), catalogLabel(p.catalog), p.catalog, p.category].join(' '));
     return !q || blob.includes(q);
   });
@@ -51,26 +55,62 @@ function adminImage(p) {
   return `${src}?v=4`;
 }
 
+function pdfHref(p) {
+  if (!p.pdf) return '';
+  const base = p.pdf.startsWith('http') ? p.pdf : `/${p.pdf.replace(/^\//, '')}`;
+  return p.page ? `${base}#page=${p.page}` : base;
+}
+
+function formatBytes(n) {
+  if (!Number.isFinite(n) || n <= 0) return '—';
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function renderProducts() {
   const rows = filteredProducts();
   const published = products.filter(p => p.published).length;
-  $('productStats').textContent = `${published} publicados · ${rows.length} en vista · ${products.length} totales`;
-  $('productRows').innerHTML = rows.map(p => `
+  const withFob = products.filter(p => Number.isFinite(p.fobUsd)).length;
+  $('productStats').textContent = `${published} publicados · ${rows.length} en vista · ${products.length} totales · ${withFob} con FOB`;
+  $('productRows').innerHTML = rows.map(p => {
+    const href = pdfHref(p);
+    return `
     <tr data-product="${escapeHtml(p.id)}">
       <td><input type="checkbox" data-id="${escapeHtml(p.id)}" ${p.published ? 'checked' : ''}></td>
       <td><button class="thumb-edit" type="button" data-edit="${escapeHtml(p.id)}" title="Editar foto"><img class="thumb-mini" src="${escapeHtml(adminImage(p))}" alt=""></button></td>
       <td><b>${escapeHtml(p.code)}</b></td>
-      <td>${escapeHtml(p.name)}</td>
+      <td>${escapeHtml(translateText(p.name))}</td>
       <td>${escapeHtml(catalogLabel(p.catalog))}</td>
       <td>${escapeHtml(formatFob(p.fobUsd))}</td>
+      <td>${href ? `<a class="btn btn-ghost" href="${escapeHtml(href)}" target="_blank" rel="noopener">PDF</a>` : '—'}</td>
       <td>
         <select data-badge="${escapeHtml(p.id)}">${badgeOptions(p.badge)}</select>
         ${p.badge ? `<div class="mini-tag ${PRODUCT_BADGES[p.badge]?.className || ''}">${escapeHtml(badgeLabel(p.badge, p.badgeText))}</div>` : ''}
       </td>
       <td><span class="status-pill ${p.published ? 'on' : 'off'}">${p.published ? 'Visible' : 'Oculto'}</span></td>
       <td><button class="btn btn-ghost" type="button" data-edit="${escapeHtml(p.id)}">Editar</button></td>
-    </tr>
-  `).join('');
+    </tr>`;
+  }).join('');
+}
+
+function renderCatalogs() {
+  if (!$('catalogRows')) return;
+  const brasil = catalogs.filter(c => c.origin === 'brasil');
+  const withFob = brasil.reduce((n, c) => n + (c.fobCount || 0), 0);
+  const articles = brasil.reduce((n, c) => n + (c.productCount || 0), 0);
+  $('catalogStats').textContent = `${catalogs.length} catálogos · ${articles} artículos Brasil · ${withFob} con FOB`;
+  $('catalogRows').innerHTML = catalogs.map(c => {
+    const href = c.pdf ? `/${String(c.pdf).replace(/^\//, '')}` : '';
+    const origin = c.origin === 'local' ? 'Local' : 'Brasil';
+    return `<tr>
+      <td><b>${escapeHtml(catalogLabel(c.name))}</b><div class="muted" style="font-size:12px;">${escapeHtml(c.name)}</div></td>
+      <td>${escapeHtml(origin)}</td>
+      <td>${c.productCount || 0}</td>
+      <td>${c.fobCount || 0}</td>
+      <td>${escapeHtml(formatBytes(c.size))}</td>
+      <td>${c.exists && href ? `<a class="btn btn-black" href="${escapeHtml(href)}" target="_blank" rel="noopener">Abrir PDF</a>` : '<span class="muted">No encontrado</span>'}</td>
+    </tr>`;
+  }).join('');
 }
 
 function upsertProduct(updated) {
@@ -249,11 +289,13 @@ async function init() {
   }
   $('adminUserLabel').textContent = `${me.user.name || me.user.username}`;
   products = (await api('/api/admin/products')).products;
+  catalogs = (await api('/api/admin/catalogs')).catalogs || [];
   fillCatalogFilters();
   await refreshLists();
   await loadList(currentListId);
   await refreshUsers();
   renderProducts();
+  renderCatalogs();
 
   document.querySelectorAll('.admin-tabs [data-tab]').forEach(btn => {
     btn.addEventListener('click', () => switchTab(btn.dataset.tab));
@@ -261,6 +303,7 @@ async function init() {
   $('logoutBtn').addEventListener('click', logout);
   $('productSearch').addEventListener('input', renderProducts);
   $('productCatalogFilter').addEventListener('change', renderProducts);
+  $('productFobFilter')?.addEventListener('change', renderProducts);
   $('priceCatalogFilter').addEventListener('change', renderPrices);
   $('selectAllProducts').addEventListener('change', () => {
     setVisibility(filteredProducts().map(p => p.id), $('selectAllProducts').checked)
