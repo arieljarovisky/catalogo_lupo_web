@@ -7,17 +7,17 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=8">
+  <link rel="stylesheet" href="/styles.css?v=9">
 </head>
 <body>
   <div class="topbar">
     <span>Envío a todo el país</span>
-    <span>Catálogo mayorista</span>
+    <span id="topbarMode">Catálogo mayorista</span>
     <span>Atención comercial</span>
   </div>
   <header class="site-header">
     <div class="header-row">
-      <a href="/"><img src="/logo.svg" alt="Lupo" class="logo-img"></a>
+      <a href="/" id="logoHome"><img src="/logo.svg" alt="Lupo" class="logo-img"></a>
       <form class="search-box" id="headerSearchForm">
         <input id="search" placeholder="Buscar por código, nombre, color o talle">
         <button type="submit">Buscar</button>
@@ -31,6 +31,8 @@
           <button id="textSmaller" class="btn btn-ghost" type="button" aria-label="Letra más chica">A−</button>
           <button id="textBigger" class="btn btn-ghost" type="button" aria-label="Letra más grande">A+</button>
         </div>
+        <a id="brasilLink" class="btn btn-ghost" href="/brasil" hidden>Pedidos Brasil</a>
+        <a id="mayoristaLink" class="btn btn-ghost" href="/" hidden>Catálogo mayorista</a>
         <a id="adminLink" class="btn btn-ghost" href="/admin" hidden>Admin</a>
         <button id="logoutBtn" class="btn btn-ghost" type="button">Salir</button>
         <button id="cartBtn" class="btn btn-black cart-btn" type="button">
@@ -87,7 +89,7 @@
         <div class="content-head">
           <div>
             <h3><span id="resultCount">0</span> productos</h3>
-            <p>Artículos de tus catálogos 2026. Los precios corresponden a tu lista asignada.</p>
+            <p id="catalogBlurb">Artículos de tus catálogos 2026. Los precios corresponden a tu lista asignada.</p>
           </div>
           <div class="view-tools">
             <button id="gridBtn" class="btn btn-black" type="button">Grilla</button>
@@ -183,6 +185,6 @@
   </div>
 
   <script src="/js/common.js?v=4"></script>
-  <script src="/app.js?v=8"></script>
+  <script src="/app.js?v=9"></script>
 </body>
 </html>

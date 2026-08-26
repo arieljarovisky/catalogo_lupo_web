@@ -1,4 +1,4 @@
-const { escapeHtml, translateText, normalizeText, formatArs, api, logout, catalogLabel, PRODUCT_BADGES, badgeInfo, badgeLabel } = window.LupoCommon;
+const { escapeHtml, translateText, normalizeText, formatArs, formatFob, api, logout, catalogLabel, PRODUCT_BADGES, badgeInfo, badgeLabel } = window.LupoCommon;
 
 const state = { search: '', codes: '', catalog: '', category: '', size: '', color: '', badge: '', view: 'grid' };
 const $ = id => document.getElementById(id);
@@ -6,6 +6,11 @@ const SURTIDO_SIZE = 'Surtido';
 const SURTIDO_COLOR = 'SURTIDO';
 const SURTIDO_COLOR_NAME = 'Colores surtido';
 const TEXT_SCALES = ['md', 'lg', 'xl'];
+const brasilMode = (() => {
+  const path = (location.pathname || '/').replace(/\/+$/, '') || '/';
+  if (path === '/brasil') return true;
+  return new URLSearchParams(location.search).get('pedido') === 'brasil';
+})();
 let products = [];
 let currentUser = null;
 let cart = [];
@@ -15,10 +20,12 @@ let whatsappNumber = '';
 let modalProduct = null;
 
 function cartStorageKey() {
-  return `lupo-cart-v2-${currentUser?.username || 'anon'}`;
+  const mode = brasilMode ? 'brasil' : 'mayorista';
+  return `lupo-cart-v2-${mode}-${currentUser?.username || 'anon'}`;
 }
 function notesStorageKey() {
-  return `lupo-cart-notes-v1-${currentUser?.username || 'anon'}`;
+  const mode = brasilMode ? 'brasil' : 'mayorista';
+  return `lupo-cart-notes-v1-${mode}-${currentUser?.username || 'anon'}`;
 }
 function textScaleKey() {
   return 'lupo-text-scale';
@@ -198,11 +205,27 @@ function saveCart() {
 function cartTotalQty() {
   return cart.reduce((sum, item) => sum + Number(item.qty || 0), 0);
 }
-function cartTotalArs() {
+function cartTotalMoney() {
   return cart.reduce((sum, item) => {
-    if (!Number.isFinite(item.priceArs)) return sum;
-    return sum + item.priceArs * Number(item.qty || 0);
+    const price = brasilMode ? item.fobUsd : item.priceArs;
+    if (!Number.isFinite(price)) return sum;
+    return sum + price * Number(item.qty || 0);
   }, 0);
+}
+function formatCatalogPrice(p) {
+  if (brasilMode) {
+    return Number.isFinite(p.fobUsd) ? formatFob(p.fobUsd) : 'Consultar';
+  }
+  return formatArs(p.priceArs);
+}
+function formatLinePrice(item) {
+  if (brasilMode) {
+    return Number.isFinite(item.fobUsd) ? formatFob(item.fobUsd) : 'Consultar';
+  }
+  return formatArs(item.priceArs);
+}
+function hasCatalogPrice(p) {
+  return brasilMode ? Number.isFinite(p.fobUsd) : Number.isFinite(p.priceArs);
 }
 function updateCartBadge() {
   const count = cartTotalQty();
@@ -216,9 +239,9 @@ function updateOrderDock() {
   if (!dock) return;
   const total = cartTotalQty();
   dock.hidden = total === 0;
-  const money = cartTotalArs();
+  const money = cartTotalMoney();
   $('dockSummary').textContent = total
-    ? `${total} unidad${total === 1 ? '' : 'es'} · ${formatArs(money)}`
+    ? `${total} unidad${total === 1 ? '' : 'es'} · ${brasilMode ? formatFob(money) : formatArs(money)}`
     : 'Pedido vacío';
 }
 function applyTextScale(scale) {
@@ -247,10 +270,29 @@ async function init() {
   currentUser = me.user;
   whatsappNumber = me.whatsappNumber || '';
   $('userName').textContent = currentUser.name || currentUser.username;
-  $('userList').textContent = me.priceListName ? `Lista ${me.priceListName}` : 'Sin lista asignada';
+
+  if (brasilMode) {
+    if (currentUser.role !== 'admin') {
+      window.location.href = '/';
+      return;
+    }
+    document.title = 'Pedidos Brasil | Lupo';
+    if ($('topbarMode')) $('topbarMode').textContent = 'Pedidos Brasil';
+    if ($('catalogBlurb')) $('catalogBlurb').textContent = 'Todos los productos del sistema. Precios en FOB USD para pedidos a Brasil.';
+    if ($('userList')) $('userList').textContent = 'Pedido Brasil · FOB USD';
+    if ($('mayoristaLink')) $('mayoristaLink').hidden = false;
+    if ($('brasilLink')) $('brasilLink').hidden = true;
+    if ($('logoHome')) $('logoHome').href = '/brasil';
+    document.body.classList.add('brasil-mode');
+  } else {
+    $('userList').textContent = me.priceListName ? `Lista ${me.priceListName}` : 'Sin lista asignada';
+    if (currentUser.role === 'admin' && $('brasilLink')) $('brasilLink').hidden = false;
+  }
   if (currentUser.role === 'admin') $('adminLink').hidden = false;
 
-  const catalog = await api('/api/catalog');
+  const catalog = brasilMode
+    ? await api('/api/admin/catalog-brasil')
+    : await api('/api/catalog');
   products = catalog.products || [];
   cart = loadCart();
   cartNotes = loadNotes();
@@ -420,12 +462,12 @@ function render() {
   grid.querySelectorAll('[data-open]').forEach(btn => btn.addEventListener('click', () => openModal(btn.dataset.open)));
 }
 function card(p) {
-  const priced = Number.isFinite(p.priceArs);
+  const priced = hasCatalogPrice(p);
   return `<article class="product">
     <div class="thumb"><img loading="lazy" src="${productImage(p)}" alt="${escapeHtml(translateText(p.name))}"><span class="badge">${escapeHtml(p.code)}</span>${offerTagHtml(p)}</div>
     <div class="info">
       <h4>${escapeHtml(translateText(p.name))}</h4>
-      <div class="price ${priced ? '' : 'muted'}">${escapeHtml(formatArs(p.priceArs))}</div>
+      <div class="price ${priced ? '' : 'muted'}">${escapeHtml(formatCatalogPrice(p))}</div>
       <div class="meta"><span class="pill">${escapeHtml(catalogLabel(p.catalog))}</span><span class="pill">${escapeHtml(translateText(p.category))}</span></div>
       <p class="desc">${escapeHtml(translateText(p.description || 'Sin descripción cargada.'))}</p>
       <div class="card-actions">
@@ -502,13 +544,14 @@ function openModal(id) {
   }
   $('modalTitle').textContent = translateText(p.name);
   $('modalCode').textContent = p.code;
-  $('modalPrice').textContent = formatArs(p.priceArs);
-  $('modalPrice').classList.toggle('muted', !Number.isFinite(p.priceArs));
+  $('modalPrice').textContent = formatCatalogPrice(p);
+  $('modalPrice').classList.toggle('muted', !hasCatalogPrice(p));
   $('modalDesc').textContent = translateText(p.description || '');
   fillCartForm(p);
   const colorNames = (p.colors || []).map(c => colorLabel(c)).filter(Boolean);
+  const priceRowLabel = brasilMode ? 'FOB USD' : 'Precio';
   $('modalMeta').innerHTML = `
-    <tr><td>Precio</td><td>${escapeHtml(formatArs(p.priceArs))}</td></tr>
+    <tr><td>${priceRowLabel}</td><td>${escapeHtml(formatCatalogPrice(p))}</td></tr>
     <tr><td>Catálogo</td><td>${escapeHtml(catalogLabel(p.catalog))}</td></tr>
     <tr><td>Categoría</td><td>${escapeHtml(translateText(p.category))}</td></tr>
     <tr><td>Talles</td><td>${escapeHtml(p.sizes || 'No detectado')}</td></tr>
@@ -546,6 +589,7 @@ function onAddToCart(e) {
     colorCode,
     colorName,
     priceArs: Number.isFinite(p.priceArs) ? p.priceArs : null,
+    fobUsd: Number.isFinite(p.fobUsd) ? p.fobUsd : null,
     qty
   };
   const key = cartLineKey(incoming);
@@ -553,6 +597,7 @@ function onAddToCart(e) {
   if (existing) {
     existing.qty += qty;
     if (existing.priceArs == null && incoming.priceArs != null) existing.priceArs = incoming.priceArs;
+    if (existing.fobUsd == null && incoming.fobUsd != null) existing.fobUsd = incoming.fobUsd;
   } else {
     cart.push(incoming);
   }
@@ -572,12 +617,11 @@ function closeCart() {
 }
 function renderCart() {
   const total = cartTotalQty();
-  const money = cartTotalArs();
+  const money = cartTotalMoney();
   $('cartSummary').textContent = total
-    ? `${cart.length} línea${cart.length === 1 ? '' : 's'} · ${total} unidad${total === 1 ? '' : 'es'} · ${formatArs(money)}`
+    ? `${cart.length} línea${cart.length === 1 ? '' : 's'} · ${total} unidad${total === 1 ? '' : 'es'} · ${brasilMode ? formatFob(money) : formatArs(money)}`
     : 'Sin artículos';
   $('clearCartBtn').disabled = !cart.length;
-  if ($('sendWhatsappBtn')) $('sendWhatsappBtn').disabled = !cart.length;
   if ($('sendWhatsappBtn')) $('sendWhatsappBtn').disabled = !cart.length;
   if ($('cartNotes') && $('cartNotes').value !== cartNotes) $('cartNotes').value = cartNotes;
   if (!cart.length) {
@@ -592,7 +636,7 @@ function renderCart() {
         <div class="cart-line-meta">
           <span>Talle: <b>${escapeHtml(item.size)}</b></span>
           <span>Color: <b>${escapeHtml(item.colorName || item.colorCode)}</b></span>
-          <span>Precio: <b>${escapeHtml(formatArs(item.priceArs))}</b></span>
+          <span>${brasilMode ? 'FOB' : 'Precio'}: <b>${escapeHtml(formatLinePrice(item))}</b></span>
         </div>
       </div>
       <div class="cart-line-actions">
@@ -655,7 +699,8 @@ async function sendOrderWhatsapp() {
   if (btn) btn.disabled = true;
   if (dockBtn) dockBtn.disabled = true;
   try {
-    const data = await api('/api/orders', {
+    const endpoint = brasilMode ? '/api/admin/orders-brasil' : '/api/orders';
+    const data = await api(endpoint, {
       method: 'POST',
       body: { items: cart, notes: cartNotes }
     });
@@ -663,17 +708,17 @@ async function sendOrderWhatsapp() {
       window.open(data.whatsappUrl, '_blank', 'noopener');
       return;
     }
-    const file = new File([data.xml], data.filename || 'pedido-lupo.xls', { type: 'application/vnd.ms-excel' });
+    const file = new File([data.xml], data.filename || (brasilMode ? 'pedido-brasil.xls' : 'pedido-lupo.xls'), { type: 'application/vnd.ms-excel' });
     try {
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: 'Pedido Lupo', text: data.message });
+        await navigator.share({ files: [file], title: brasilMode ? 'Pedido Brasil Lupo' : 'Pedido Lupo', text: data.message });
         return;
       }
     } catch (err) {
       if (err.name === 'AbortError') return;
     }
     if (data.xml) downloadExcelFile(data.xml, data.filename);
-    const text = encodeURIComponent(data.message || 'Pedido Lupo');
+    const text = encodeURIComponent(data.message || (brasilMode ? 'Pedido Brasil Lupo' : 'Pedido Lupo'));
     window.open(`https://wa.me/?text=${text}`, '_blank', 'noopener');
     alert('Configurá tu número de WhatsApp en Administración para que el pedido te llegue directo.');
   } catch (err) {

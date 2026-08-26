@@ -321,9 +321,9 @@ function catalogSummaries(list) {
   return [...map.values()];
 }
 
-function catalogProduct(p, priceArs) {
+function catalogProduct(p, priceArs, { includeFob = false } = {}) {
   const meta = getMeta(p.id);
-  return {
+  const item = {
     id: p.id,
     code: p.code,
     name: resolvedName(p),
@@ -341,6 +341,8 @@ function catalogProduct(p, priceArs) {
     badgeText: meta.badgeText || '',
     priceArs: Number.isFinite(priceArs) ? priceArs : null
   };
+  if (includeFob) item.fobUsd = Number.isFinite(p.fobUsd) ? p.fobUsd : null;
+  return item;
 }
 
 function loadCatalogRegistry() {
@@ -386,15 +388,19 @@ function escapeXml(value) {
     .replace(/"/g, '&quot;');
 }
 
-function formatArsPlain(value) {
+function formatMoneyPlain(value) {
   if (!Number.isFinite(value)) return '';
   return value.toFixed(2);
 }
 
-function buildOrderExcelXml({ clientName, username, items, notes }) {
-  const header = ['Codigo', 'Producto', 'Talle', 'Color', 'Cantidad', 'Precio ARS', 'Total ARS'];
+function buildOrderExcelXml({ clientName, username, items, notes, currency = 'ARS' }) {
+  const isFob = currency === 'USD';
+  const priceKey = isFob ? 'fobUsd' : 'priceArs';
+  const priceLabel = isFob ? 'Precio FOB USD' : 'Precio ARS';
+  const totalLabel = isFob ? 'Total FOB USD' : 'Total ARS';
+  const header = ['Codigo', 'Producto', 'Talle', 'Color', 'Cantidad', priceLabel, totalLabel];
   const body = items.map(item => {
-    const price = Number.isFinite(item.priceArs) ? item.priceArs : null;
+    const price = Number.isFinite(item[priceKey]) ? item[priceKey] : null;
     const total = price != null ? price * Number(item.qty || 0) : null;
     const color = item.colorName || item.colorCode || '';
     return [
@@ -403,21 +409,22 @@ function buildOrderExcelXml({ clientName, username, items, notes }) {
       item.size || '',
       color,
       String(item.qty),
-      formatArsPlain(price),
-      formatArsPlain(total)
+      formatMoneyPlain(price),
+      formatMoneyPlain(total)
     ];
   });
   const qtyTotal = items.reduce((sum, item) => sum + Number(item.qty || 0), 0);
   const moneyTotal = items.reduce((sum, item) => {
-    if (!Number.isFinite(item.priceArs)) return sum;
-    return sum + item.priceArs * Number(item.qty || 0);
+    if (!Number.isFinite(item[priceKey])) return sum;
+    return sum + item[priceKey] * Number(item.qty || 0);
   }, 0);
   const info = [
     ['Cliente', clientName],
     ['Usuario', username],
+    ['Tipo', isFob ? 'Pedido Brasil (FOB)' : 'Pedido mayorista'],
     ['Fecha', new Date().toLocaleString('es-AR')],
     ['Unidades', String(qtyTotal)],
-    ['Total ARS', formatArsPlain(moneyTotal)],
+    [totalLabel, formatMoneyPlain(moneyTotal)],
     ['Notas', notes || '']
   ];
   const allRows = [...info, [], header, ...body];
@@ -562,6 +569,7 @@ app.get('/login', (req, res) => {
   res.sendFile(path.join(ROOT, 'login.html'));
 });
 app.get('/', sendHtmlIfAuth('index.html'));
+app.get('/brasil', sendHtmlIfAuth('index.html', 'admin'));
 app.get('/admin', sendHtmlIfAuth('admin.html', 'admin'));
 
 app.post('/api/login', (req, res) => {
@@ -691,6 +699,76 @@ app.get('/api/catalog', requireAuth, (req, res) => {
     products: items,
     catalogs: catalogSummaries(items),
     priceListName: list ? list.name : null
+  });
+});
+
+app.get('/api/admin/catalog-brasil', requireAdmin, (req, res) => {
+  const items = PRODUCTS.map(p => catalogProduct(p, null, { includeFob: true }));
+  res.json({
+    products: items,
+    catalogs: catalogSummaries(items),
+    mode: 'brasil'
+  });
+});
+
+app.post('/api/admin/orders-brasil', requireAdmin, (req, res) => {
+  const incoming = Array.isArray(req.body?.items) ? req.body.items : [];
+  const notes = String(req.body?.notes || '').trim().slice(0, 800);
+  if (!incoming.length) return res.status(400).json({ error: 'El pedido está vacío.' });
+  if (incoming.length > 250) return res.status(400).json({ error: 'El pedido tiene demasiadas líneas.' });
+  const items = [];
+  for (const raw of incoming) {
+    const code = String(raw?.code || '').trim().slice(0, 40);
+    const qty = Math.max(1, Math.min(9999, parseInt(raw?.qty, 10) || 0));
+    if (!code || !qty) continue;
+    const fob = Number(raw?.fobUsd);
+    items.push({
+      code,
+      name: String(raw?.name || '').trim().slice(0, 160),
+      size: String(raw?.size || '').trim().slice(0, 40),
+      colorCode: String(raw?.colorCode || '').trim().slice(0, 40),
+      colorName: String(raw?.colorName || '').trim().slice(0, 80),
+      qty,
+      fobUsd: Number.isFinite(fob) ? fob : null
+    });
+  }
+  if (!items.length) return res.status(400).json({ error: 'No hay artículos válidos en el pedido.' });
+  const token = crypto.randomBytes(16).toString('hex');
+  const filename = `pedido-brasil-${new Date().toISOString().slice(0, 10)}-${token.slice(0, 6)}.xls`;
+  const xml = buildOrderExcelXml({
+    clientName: req.user.name || req.user.username,
+    username: req.user.username,
+    items,
+    notes,
+    currency: 'USD'
+  });
+  fs.mkdirSync(ORDERS_DIR, { recursive: true });
+  fs.writeFileSync(path.join(ORDERS_DIR, `${token}.xls`), xml, 'utf8');
+  const excelUrl = `${publicBaseUrl(req)}/pedido/${token}`;
+  const qtyTotal = items.reduce((sum, item) => sum + item.qty, 0);
+  const moneyTotal = items.reduce((sum, item) => sum + (Number.isFinite(item.fobUsd) ? item.fobUsd * item.qty : 0), 0);
+  const phone = normalizeWhatsapp(db.settings?.whatsappNumber);
+  const message = [
+    'Pedido Lupo Brasil (FOB)',
+    `Cliente: ${req.user.name || req.user.username}`,
+    `Usuario: ${req.user.username}`,
+    `${items.length} línea${items.length === 1 ? '' : 's'} · ${qtyTotal} unidad${qtyTotal === 1 ? '' : 'es'}`,
+    moneyTotal ? `Total FOB: USD ${moneyTotal.toFixed(2)}` : '',
+    notes ? `Notas: ${notes}` : '',
+    '',
+    'Excel del pedido:',
+    excelUrl
+  ].filter((line, i, arr) => line !== '' || (i > 0 && arr[i - 1] !== '')).join('\n').trim();
+  const whatsappUrl = phone
+    ? `https://wa.me/${phone}?text=${encodeURIComponent(message)}`
+    : '';
+  res.json({
+    token,
+    filename,
+    excelUrl,
+    whatsappUrl,
+    message,
+    xml
   });
 });
 

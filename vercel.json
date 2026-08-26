@@ -2,12 +2,16 @@
   "cleanUrls": true,
   "rewrites": [
     { "source": "/pedido/:token", "destination": "/api" },
-    { "source": "/api/:path*", "destination": "/api" }
+    { "source": "/api/:path*", "destination": "/api" },
+    { "source": "/brasil", "destination": "/api" },
+    { "source": "/admin", "destination": "/api" },
+    { "source": "/login", "destination": "/api" },
+    { "source": "/", "destination": "/api" }
   ],
   "functions": {
     "api/index.js": {
-      "includeFiles": "{data.js,agosto-2026-capital-prices.json,multilupo-prices.json}",
-      "excludeFiles": "{pdfs,assets,tmp_pdf_text}/**"
+      "includeFiles": "{data.js,agosto-2026-capital-prices.json,multilupo-prices.json,catalogs.json,index.html,admin.html,login.html,styles.css,app.js,logo.svg,js/**}",
+      "excludeFiles": "{pdfs,tmp_pdf_text}/**"
     }
   }
 }
