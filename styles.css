@@ -53,6 +53,7 @@ button, input, select, textarea { font: inherit; }
 .logo-img { height: 36px; width: auto; display: block; }
 .search-box {
   display: flex;
+  min-width: 0;
   border: 1px solid var(--line);
   background: var(--soft);
   border-radius: var(--radius);
@@ -60,6 +61,7 @@ button, input, select, textarea { font: inherit; }
 }
 .search-box input {
   flex: 1;
+  min-width: 0;
   border: 0;
   background: transparent;
   padding: 12px 14px;
@@ -67,17 +69,23 @@ button, input, select, textarea { font: inherit; }
 }
 .search-box button,
 .icon-btn {
+  flex: 0 0 auto;
   border: 0;
   background: var(--black);
   color: #fff;
   padding: 0 16px;
+  min-width: 88px;
+  white-space: nowrap;
   cursor: pointer;
   font-weight: 700;
 }
 .header-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 8px;
+  max-width: 520px;
 }
 .user-chip {
   font-size: 12px;
