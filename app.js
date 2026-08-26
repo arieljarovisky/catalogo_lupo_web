@@ -244,13 +244,32 @@ function parseOrderCsv(text) {
   }
   return rows;
 }
+function findProductByName(name) {
+  const n = normalizeText(translateText(name || ''));
+  if (!n || n.length < 8) return null;
+  let best = null;
+  let bestScore = 0;
+  for (const p of products) {
+    const pn = normalizeText(translateText(p.name || ''));
+    if (!pn) continue;
+    if (pn === n) return p;
+    if (pn.includes(n) || n.includes(pn)) {
+      const score = Math.min(pn.length, n.length);
+      if (score > bestScore) {
+        bestScore = score;
+        best = p;
+      }
+    }
+  }
+  return bestScore >= 12 ? best : null;
+}
 function importOrderRows(rows, { notes, replace = true } = {}) {
   if (!rows.length) throw new Error('No se encontraron líneas válidas en el archivo.');
   const incoming = [];
   let matched = 0;
   let unmatched = 0;
   for (const row of rows) {
-    const product = findProductByCode(row.code);
+    const product = findProductByCode(row.code) || findProductByName(row.name);
     const color = matchOrderColor(product, row.color);
     const size = matchOrderSize(row.size);
     if (product) matched += 1;
@@ -640,14 +659,26 @@ function fillCartForm(p) {
   $('cartProductId').value = p.id;
   const sizes = sizesFrom(p.sizes);
   const colors = (p.colors && p.colors.length) ? p.colors : [{ code: '-', name: 'Sin color' }];
+  const nameCounts = colors.reduce((acc, c) => {
+    const key = normalizeText(colorLabel(c));
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
   $('cartSizeChips').innerHTML = [
     ...sizes.map(s => `<button type="button" class="choice-chip" data-size="${escapeHtml(s)}">${escapeHtml(s)}</button>`),
     `<button type="button" class="choice-chip" data-size="${escapeHtml(SURTIDO_SIZE)}">${escapeHtml(SURTIDO_SIZE)}</button>`
   ].join('');
   $('cartColorChips').innerHTML = [
     ...colors.map(c => {
-      const label = escapeHtml(colorLabel(c));
-      return `<button type="button" class="choice-chip" data-color="${escapeHtml(c.code)}" data-name="${escapeHtml(translateText(c.name))}" data-image="${escapeHtml(colorPhoto(c) || '')}">${label}</button>`;
+      const base = colorLabel(c);
+      const dup = nameCounts[normalizeText(base)] > 1;
+      const label = escapeHtml(dup ? `${base} · ${c.code}` : base);
+      const src = colorPhoto(c) || '';
+      const swatch = approximateColor(c.name || c.code);
+      const visual = src
+        ? `<img src="${escapeHtml(src)}" alt="">`
+        : `<span class="color-dot" style="background:${escapeHtml(swatch)}"></span>`;
+      return `<button type="button" class="choice-chip color-photo-chip" data-color="${escapeHtml(c.code)}" data-name="${escapeHtml(translateText(c.name))}" data-image="${escapeHtml(src)}">${visual}<span>${label}</span></button>`;
     }),
     `<button type="button" class="choice-chip" data-color="${escapeHtml(SURTIDO_COLOR)}" data-name="Surtido" data-image="">Surtido</button>`
   ].join('');
@@ -657,6 +688,31 @@ function fillCartForm(p) {
   else selectSize('');
   if (colors.length === 1) selectColor(colors[0].code, translateText(colors[0].name));
   else selectColor('', '');
+}
+
+function approximateColor(name) {
+  const n = normalizeText(name);
+  const table = [
+    ['preto', '#111'], ['preta', '#111'], ['negro', '#111'], ['black', '#111'],
+    ['branco', '#f5f5f5'], ['branca', '#f5f5f5'], ['white', '#f5f5f5'],
+    ['cinza', '#8a8a8a'], ['gris', '#8a8a8a'], ['grafite', '#4a4a4a'],
+    ['marinho', '#0b1f4a'], ['navy', '#0b1f4a'],
+    ['petroleo', '#1c3a40'], ['azul petroleo', '#1c3a40'], ['azul caribe', '#1aa6b8'],
+    ['azul claro', '#7eb6ff'], ['celeste', '#7eb6ff'], ['anil', '#3b5bdb'], ['azul', '#1f5eff'],
+    ['verde lim', '#9acd32'], ['lima citrico', '#c6e000'], ['lima', '#9acd32'],
+    ['cacto', '#2f6b3c'], ['verde', '#2f6b3c'],
+    ['fucsia glam', '#c4007a'], ['fucsia', '#d1006c'], ['fucia', '#d1006c'],
+    ['magenta', '#c0007a'], ['rosa', '#e86aa2'], ['carmin', '#9b1b30'], ['carmim', '#9b1b30'],
+    ['coral', '#ff6f61'], ['vermelho', '#c62828'], ['rojo', '#c62828'],
+    ['laranja', '#ff7a00'], ['orange', '#ff7a00'], ['mostarda', '#c4a000'],
+    ['violeta', '#6a1b9a'], ['purple', '#6a1b9a'], ['lavanda', '#b39ddb'],
+    ['bege', '#d7c4a3'], ['chocolate', '#5d3a1a'], ['marrom', '#6b3e26'], ['noz', '#8b5a2b'],
+    ['camarao', '#e39a7b'], ['amarelo', '#f2c200'], ['oliva', '#6b7c3a']
+  ];
+  for (const [key, hex] of table) {
+    if (n.includes(key)) return hex;
+  }
+  return '#d0d0d0';
 }
 
 function selectSize(value) {
@@ -676,8 +732,10 @@ function selectColor(code, name) {
     if (code === SURTIDO_COLOR || !code) {
       $('modalImage').src = productImage(modalProduct);
     } else {
+      const fromProduct = (modalProduct.colors || []).find(c => String(c.code) === String(code));
       const chip = [...$('cartColorChips').querySelectorAll('.choice-chip')].find(btn => btn.classList.contains('active'));
-      $('modalImage').src = (chip && chip.dataset.image) || productImage(modalProduct);
+      const src = colorPhoto(fromProduct) || (chip && chip.dataset.image) || productImage(modalProduct);
+      $('modalImage').src = src;
     }
   }
   syncModalPhotoEdit();

@@ -65,7 +65,27 @@
   function findProduct(item) {
     if (item.productId && productById.has(item.productId)) return productById.get(item.productId);
     const key = normalizeCodeKey(item.code);
-    return productByCode.get(key) || null;
+    if (key && productByCode.has(key)) return productByCode.get(key);
+    return findProductByName(item.name);
+  }
+  function findProductByName(name) {
+    const n = normalizeText(translateText(name || ''));
+    if (!n || n.length < 8) return null;
+    let best = null;
+    let bestScore = 0;
+    for (const p of products) {
+      const pn = normalizeText(translateText(p.name || ''));
+      if (!pn) continue;
+      if (pn === n) return p;
+      if (pn.includes(n) || n.includes(pn)) {
+        const score = Math.min(pn.length, n.length);
+        if (score > bestScore) {
+          bestScore = score;
+          best = p;
+        }
+      }
+    }
+    return bestScore >= 12 ? best : null;
   }
   function lineImage(item) {
     const product = findProduct(item);
@@ -73,7 +93,7 @@
     if (product && code && code !== SURTIDO_COLOR && code !== '-') {
       const color = (product.colors || []).find(c => String(c.code) === code)
         || (product.colors || []).find(c => normalizeText(c.name) === normalizeText(item.colorName || ''))
-        || (product.colors || []).find(c => normalizeText(translateText(c.name || '')) === normalizeText(item.colorName || ''));
+        || (product.colors || []).find(c => normalizeText(translateText(c.name || '')) === normalizeText(translateText(item.colorName || '')));
       if (color?.image) return assetUrl(color.image);
     }
     if (item.image) return assetUrl(item.image);
