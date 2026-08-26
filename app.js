@@ -201,6 +201,7 @@ async function init() {
   $('modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
   $('addToCartForm').addEventListener('submit', onAddToCart);
   $('cartSizeChips').addEventListener('click', e => onChipClick(e, 'size'));
+  $('cartColorChips').addEventListener('click', e => onChipClick(e, 'color'));
   $('addToCartForm').addEventListener('click', e => {
     const step = e.target.closest('[data-qty-step]');
     if (!step) return;
@@ -306,9 +307,7 @@ function render() {
   $('empty').style.display = data.length ? 'none' : 'block';
   const grid = $('grid');
   grid.innerHTML = data.map(card).join('');
-  grid.querySelectorAll('[data-open-shortcut]').forEach(btn => {
-    btn.addEventListener('click', () => openModal(btn.dataset.openShortcut, btn.dataset.shortcut));
-  });
+  grid.querySelectorAll('[data-open]').forEach(btn => btn.addEventListener('click', () => openModal(btn.dataset.open)));
 }
 function card(p) {
   const priced = Number.isFinite(p.priceArs);
@@ -320,7 +319,7 @@ function card(p) {
       <div class="meta"><span class="pill">${escapeHtml(catalogLabel(p.catalog))}</span><span class="pill">${escapeHtml(translateText(p.category))}</span></div>
       <p class="desc">${escapeHtml(translateText(p.description || 'Sin descripción cargada.'))}</p>
       <div class="card-actions">
-        <button class="btn btn-black" data-open-shortcut="${p.id}" data-shortcut="both">Pedir</button>
+        <button class="btn btn-black" data-open="${p.id}">Pedir</button>
       </div>
     </div>
   </article>`;
@@ -328,12 +327,25 @@ function card(p) {
 
 function fillCartForm(p) {
   $('cartProductId').value = p.id;
-  $('cartSizeChips').innerHTML =
-    `<button type="button" class="choice-chip active" data-size="${escapeHtml(SURTIDO_SIZE)}">${escapeHtml(SURTIDO_SIZE)}</button>`;
+  const sizes = sizesFrom(p.sizes);
+  const colors = (p.colors && p.colors.length) ? p.colors : [{ code: '-', name: 'Sin color' }];
+  $('cartSizeChips').innerHTML = [
+    ...sizes.map(s => `<button type="button" class="choice-chip" data-size="${escapeHtml(s)}">${escapeHtml(s)}</button>`),
+    `<button type="button" class="choice-chip" data-size="${escapeHtml(SURTIDO_SIZE)}">${escapeHtml(SURTIDO_SIZE)}</button>`
+  ].join('');
+  $('cartColorChips').innerHTML = [
+    ...colors.map(c => {
+      const label = escapeHtml(colorLabel(c));
+      return `<button type="button" class="choice-chip" data-color="${escapeHtml(c.code)}" data-name="${escapeHtml(translateText(c.name))}" data-image="${escapeHtml(colorPhoto(c) || '')}">${label}</button>`;
+    }),
+    `<button type="button" class="choice-chip" data-color="${escapeHtml(SURTIDO_COLOR)}" data-name="Surtido" data-image="">Surtido</button>`
+  ].join('');
   $('cartQty').value = 1;
   $('cartFormMsg').hidden = true;
-  selectSize(SURTIDO_SIZE);
-  selectColor(SURTIDO_COLOR, 'Surtido');
+  if (sizes.length === 1) selectSize(sizes[0]);
+  else selectSize('');
+  if (colors.length === 1) selectColor(colors[0].code, translateText(colors[0].name));
+  else selectColor('', '');
 }
 
 function selectSize(value) {
@@ -345,14 +357,24 @@ function selectSize(value) {
 function selectColor(code, name) {
   $('cartColor').value = code || '';
   $('cartColor').dataset.name = name || '';
+  $('cartColorChips').querySelectorAll('.choice-chip').forEach(btn => {
+    const same = btn.dataset.color === code && (btn.dataset.name === name || !name);
+    btn.classList.toggle('active', Boolean(code) && same);
+  });
   if (modalProduct && $('modalImage')) {
-    $('modalImage').src = productImage(modalProduct);
+    if (code === SURTIDO_COLOR || !code) {
+      $('modalImage').src = productImage(modalProduct);
+    } else {
+      const chip = [...$('cartColorChips').querySelectorAll('.choice-chip')].find(btn => btn.classList.contains('active'));
+      $('modalImage').src = (chip && chip.dataset.image) || productImage(modalProduct);
+    }
   }
 }
 function onChipClick(e, kind) {
   const btn = e.target.closest('.choice-chip');
   if (!btn) return;
   if (kind === 'size') selectSize(btn.dataset.size);
+  else selectColor(btn.dataset.color, btn.dataset.name);
 }
 
 function openModal(id) {
@@ -373,12 +395,13 @@ function openModal(id) {
   $('modalPrice').classList.toggle('muted', !Number.isFinite(p.priceArs));
   $('modalDesc').textContent = translateText(p.description || '');
   fillCartForm(p);
+  const colorNames = (p.colors || []).map(c => colorLabel(c)).filter(Boolean);
   $('modalMeta').innerHTML = `
     <tr><td>Precio</td><td>${escapeHtml(formatArs(p.priceArs))}</td></tr>
     <tr><td>Catálogo</td><td>${escapeHtml(catalogLabel(p.catalog))}</td></tr>
     <tr><td>Categoría</td><td>${escapeHtml(translateText(p.category))}</td></tr>
-    <tr><td>Talles</td><td>Surtido</td></tr>
-    <tr><td>Colores</td><td>Surtido</td></tr>
+    <tr><td>Talles</td><td>${escapeHtml(p.sizes || 'No detectado')}</td></tr>
+    <tr><td>Colores</td><td>${colorNames.map(n => escapeHtml(n)).join(' · ') || 'No detectado'}</td></tr>
     <tr><td>Tecnología</td><td>${(p.tech || []).map(t => escapeHtml(translateText(t))).join(' · ') || 'No detectado'}</td></tr>
     <tr><td>Origen</td><td>${p.pdf ? `<a href="${p.pdf.startsWith('http') ? p.pdf : `${p.pdf}#page=${p.page}`}" target="_blank">Ver catálogo${p.page ? `, página ${p.page}` : ''}</a>` : '—'}</td></tr>`;
   $('modal').classList.add('open');
@@ -400,7 +423,7 @@ function onAddToCart(e) {
   const colorName = $('cartColor').dataset.name || '';
   const qty = Math.max(1, parseInt($('cartQty').value, 10) || 1);
   if (!size || !colorCode) {
-    showCartMsg('Elegí un talle para continuar.', false);
+    showCartMsg('Elegí talle y color para continuar.', false);
     return;
   }
   const incoming = {
