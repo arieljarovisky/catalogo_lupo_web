@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vista del pedido Brasil | Lupo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css?v=12">
+</head>
+<body class="brasil-mode pedido-page">
+  <div class="topbar">
+    <span>Pedidos Brasil</span>
+    <span>Vista del pedido</span>
+    <span>FOB USD</span>
+  </div>
+  <header class="site-header">
+    <div class="header-row pedido-header-row">
+      <a href="/brasil"><img src="/logo.svg" alt="Lupo" class="logo-img"></a>
+      <div class="pedido-header-copy">
+        <h1>Vista del pedido Brasil</h1>
+        <p id="pedidoSummary">Sin artículos</p>
+      </div>
+      <div class="header-actions">
+        <a class="btn btn-ghost" href="/brasil">Seguir comprando</a>
+        <button id="sendBtn" class="btn btn-red" type="button" disabled>Enviar pedido</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap pedido-wrap">
+    <p id="flash" class="flash" hidden></p>
+    <section id="pedidoGrid" class="pedido-grid" aria-label="Líneas del pedido"></section>
+    <section class="pedido-side">
+      <div class="field">
+        <label for="pedidoNotes">Notas del pedido</label>
+        <textarea id="pedidoNotes" maxlength="800" placeholder="Notas para el pedido..."></textarea>
+      </div>
+      <div class="pedido-side-actions">
+        <button id="clearBtn" class="btn btn-ghost" type="button" disabled>Vaciar pedido</button>
+        <a class="btn btn-black" href="/brasil">Agregar productos</a>
+      </div>
+    </section>
+  </main>
+
+  <script src="/js/common.js?v=4"></script>
+  <script src="/js/pedido-brasil.js?v=1"></script>
+</body>
+</html>

@@ -3,6 +3,7 @@
   "rewrites": [
     { "source": "/pedido/:token", "destination": "/api" },
     { "source": "/api/:path*", "destination": "/api" },
+    { "source": "/brasil/pedido", "destination": "/api" },
     { "source": "/brasil", "destination": "/api" },
     { "source": "/admin", "destination": "/api" },
     { "source": "/login", "destination": "/api" },
@@ -10,7 +11,7 @@
   ],
   "functions": {
     "api/index.js": {
-      "includeFiles": "{data.js,agosto-2026-capital-prices.json,multilupo-prices.json,catalogs.json,index.html,admin.html,login.html,styles.css,app.js,logo.svg,js/**,orders/**}",
+      "includeFiles": "{data.js,agosto-2026-capital-prices.json,multilupo-prices.json,catalogs.json,index.html,admin.html,login.html,pedido-brasil.html,styles.css,app.js,logo.svg,js/**,orders/**}",
       "excludeFiles": "{pdfs,tmp_pdf_text}/**"
     }
   }

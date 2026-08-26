@@ -571,6 +571,7 @@ app.get('/login', (req, res) => {
 });
 app.get('/', sendHtmlIfAuth('index.html'));
 app.get('/brasil', sendHtmlIfAuth('index.html', 'admin'));
+app.get('/brasil/pedido', sendHtmlIfAuth('pedido-brasil.html', 'admin'));
 app.get('/admin', sendHtmlIfAuth('admin.html', 'admin'));
 
 app.post('/api/login', (req, res) => {

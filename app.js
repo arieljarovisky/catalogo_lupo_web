@@ -194,7 +194,7 @@ function matchOrderColor(product, colorName) {
   const raw = String(colorName || '').trim();
   const n = normalizeText(raw);
   if (!n || n === 'surtido' || n === 'todos') {
-    return { code: SURTIDO_COLOR, name: 'Surtido' };
+    return { code: SURTIDO_COLOR, name: 'Surtido', image: '' };
   }
   const translated = normalizeText(translateText(raw));
   const colors = product?.colors || [];
@@ -208,8 +208,14 @@ function matchOrderColor(product, colorName) {
     const tname = normalizeText(translateText(c.name || ''));
     return name.includes(n) || n.includes(name) || tname.includes(translated) || translated.includes(tname);
   });
-  if (hit) return { code: hit.code, name: translateText(hit.name) || hit.name || hit.code };
-  return { code: raw.slice(0, 40), name: translateText(raw) || raw };
+  if (hit) {
+    return {
+      code: hit.code,
+      name: translateText(hit.name) || hit.name || hit.code,
+      image: hit.image || ''
+    };
+  }
+  return { code: raw.slice(0, 40), name: translateText(raw) || raw, image: '' };
 }
 function matchOrderSize(size) {
   const raw = String(size || '').trim();
@@ -254,6 +260,7 @@ function importOrderRows(rows, { notes, replace = true } = {}) {
       size,
       colorCode: color.code,
       colorName: color.name,
+      image: color.image || product?.image || '',
       priceArs: null,
       fobUsd: Number.isFinite(product?.fobUsd) ? product.fobUsd : null,
       qty: row.qty
@@ -415,6 +422,8 @@ async function init() {
     document.body.classList.add('brasil-mode');
     if ($('brasilImport')) $('brasilImport').hidden = false;
     if ($('cartTitle')) $('cartTitle').textContent = 'Pedido Brasil';
+    if ($('viewPedidoPageBtn')) $('viewPedidoPageBtn').hidden = false;
+    if ($('dockPedidoPageBtn')) $('dockPedidoPageBtn').hidden = false;
   } else {
     $('userList').textContent = me.priceListName ? `Lista ${me.priceListName}` : 'Sin lista asignada';
     if (currentUser.role === 'admin' && $('brasilLink')) $('brasilLink').hidden = false;
@@ -736,6 +745,11 @@ function onAddToCart(e) {
     size,
     colorCode,
     colorName,
+    image: (() => {
+      if (colorCode === SURTIDO_COLOR || !colorCode || colorCode === '-') return p.image || '';
+      const color = (p.colors || []).find(c => String(c.code) === String(colorCode));
+      return color?.image || p.image || '';
+    })(),
     priceArs: Number.isFinite(p.priceArs) ? p.priceArs : null,
     fobUsd: Number.isFinite(p.fobUsd) ? p.fobUsd : null,
     qty
