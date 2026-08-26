@@ -54,6 +54,25 @@ function colorLabel(c) {
   const code = String(c.code || '').trim();
   return !code || code === '-' ? 'Sin color' : code;
 }
+function productColorNames(p) {
+  const seen = new Set();
+  const names = [];
+  for (const c of p?.colors || []) {
+    const label = colorLabel(c);
+    if (!label || label === 'Sin color') continue;
+    const key = normalizeText(label);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    names.push(label);
+  }
+  return names;
+}
+function productDisplayName(p) {
+  const base = translateText(p?.name || '').trim() || p?.code || '';
+  const colors = productColorNames(p);
+  if (!colors.length) return base;
+  return `${base} · ${colors.join(', ')}`;
+}
 function productImage(p) {
   return assetUrl(p && p.image);
 }
@@ -644,10 +663,11 @@ function render() {
 }
 function card(p) {
   const priced = hasCatalogPrice(p);
+  const title = productDisplayName(p);
   return `<article class="product">
-    <div class="thumb"><img loading="lazy" src="${productImage(p)}" alt="${escapeHtml(translateText(p.name))}"><span class="badge">${escapeHtml(p.code)}</span>${offerTagHtml(p)}</div>
+    <div class="thumb"><img loading="lazy" src="${productImage(p)}" alt="${escapeHtml(title)}"><span class="badge">${escapeHtml(p.code)}</span>${offerTagHtml(p)}</div>
     <div class="info">
-      <h4>${escapeHtml(translateText(p.name))}</h4>
+      <h4>${escapeHtml(title)}</h4>
       <div class="price ${priced ? '' : 'muted'}">${escapeHtml(formatCatalogPrice(p))}</div>
       <div class="meta"><span class="pill">${escapeHtml(catalogLabel(p.catalog))}</span><span class="pill">${escapeHtml(translateText(p.category))}</span></div>
       <p class="desc">${escapeHtml(translateText(p.description || 'Sin descripción cargada.'))}</p>
@@ -762,13 +782,13 @@ function openModal(id) {
     offer.className = `offer-tag ${info ? info.className : ''}`;
     offer.textContent = info ? badgeLabel(p.badge, p.badgeText) : '';
   }
-  $('modalTitle').textContent = translateText(p.name);
+  $('modalTitle').textContent = productDisplayName(p);
   $('modalCode').textContent = p.code;
   $('modalPrice').textContent = formatCatalogPrice(p);
   $('modalPrice').classList.toggle('muted', !hasCatalogPrice(p));
   $('modalDesc').textContent = translateText(p.description || '');
   fillCartForm(p);
-  const colorNames = (p.colors || []).map(c => colorLabel(c)).filter(Boolean);
+  const colorNames = productColorNames(p);
   const priceRowLabel = brasilMode ? 'FOB USD' : 'Precio';
   $('modalMeta').innerHTML = `
     <tr><td>${priceRowLabel}</td><td>${escapeHtml(formatCatalogPrice(p))}</td></tr>
