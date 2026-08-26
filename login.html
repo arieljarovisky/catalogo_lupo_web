@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ingresar | Lupo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css?v=5">
+</head>
+<body class="login-page">
+  <header class="topbar">
+    <span>Envío a todo el país</span>
+    <span>Solo venta mayorista</span>
+    <span>Atención comercial</span>
+  </header>
+  <main class="login-wrap">
+    <a class="brand-link" href="/login">
+      <img src="/logo.svg" alt="Lupo" class="logo-img">
+    </a>
+    <section class="login-card">
+      <h1>Accedé a tu catálogo</h1>
+      <p>Ingresá con tu usuario para ver los productos y tu lista de precios.</p>
+      <form id="loginForm" autocomplete="on">
+        <label>
+          Usuario
+          <input id="username" name="username" required autofocus>
+        </label>
+        <label>
+          Contraseña
+          <input id="password" name="password" type="password" required>
+        </label>
+        <p id="loginError" class="form-error" hidden></p>
+        <button id="loginSubmit" class="btn btn-black" type="submit">Ingresar</button>
+      </form>
+    </section>
+  </main>
+  <script src="/js/auth.js"></script>
+</body>
+</html>

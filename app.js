@@ -1,59 +1,33 @@
+const { escapeHtml, translateText, normalizeText, formatArs, api, logout, catalogLabel, PRODUCT_BADGES, badgeInfo, badgeLabel } = window.LupoCommon;
 
-const CART_STORAGE_KEY = 'lupo-cart-v1';
-const state = { search: '', codes: '', catalog: '', category: '', size: '', color: '', view: 'grid' };
+const state = { search: '', codes: '', catalog: '', category: '', size: '', color: '', badge: '', view: 'grid' };
 const $ = id => document.getElementById(id);
-const products = window.PRODUCTS || [];
-let cart = loadCart();
+const SURTIDO_SIZE = 'Surtido';
+const SURTIDO_COLOR = 'SURTIDO';
+const SURTIDO_COLOR_NAME = 'Colores surtido';
+const TEXT_SCALES = ['md', 'lg', 'xl'];
+let products = [];
+let currentUser = null;
+let cart = [];
+let cartNotes = '';
 let cartMsgTimer = null;
+let whatsappNumber = '';
+let modalProduct = null;
 
-const TRANSLATIONS = [
-  ['LANÇAMENTO', 'Novedad'], ['Lançamento', 'Novedad'], ['Lançamentos', 'Novedades'],
-  ['Lupo Cuecas', 'Lupo Ropa Interior Masculina'], ['Lupo Meias', 'Lupo Medias'], ['Meia-Calça', 'Pantimedias'], ['Meia-calça', 'Pantimedia'],
-  ['FEMININOS', 'FEMENINOS'], ['FEMININO', 'FEMENINO'], ['FEMININA', 'FEMENINA'], ['MASCULINOS', 'MASCULINOS'], ['MASCULINO', 'MASCULINO'],
-  ['LINGERIE', 'LENCERÍA'], ['CONFORTO', 'CONFORT'], ['SEM COSTURA', 'SIN COSTURAS'], ['COM COSTURA', 'CON COSTURA'],
-  ['TOPS FEMININOS', 'TOPS FEMENINOS'], ['BOT TOMS FEMININO', 'PRENDAS INFERIORES FEMENINAS'], ['BOTTOMS FEMININO', 'PRENDAS INFERIORES FEMENINAS'],
-  ['BOXERS SEAMLESS', 'BÓXERS SIN COSTURAS'], ['BOXES SEAMLESS', 'BÓXERS SIN COSTURAS'], ['CUECAS', 'ROPA INTERIOR MASCULINA'], ['CUECA', 'BÓXER'],
-  ['MEIAS', 'MEDIAS'], ['MEIA', 'MEDIA'], ['CALÇAS', 'PANTALONES'], ['CALÇA', 'PANTALÓN'], ['CALCA', 'PANTALÓN'], ['SEGUNDA PELE', 'SEGUNDA PIEL'],
-  ['LINHA', 'LÍNEA'], ['ATRIBUTOS', 'ATRIBUTOS'], ['TERAPÉUTICA', 'TERAPÉUTICA'], ['ESPORTIVAS', 'DEPORTIVAS'], ['ESPORTIVA', 'DEPORTIVA'],
-  ['Algodão', 'Algodón'], ['Preta', 'Negro'], ['Branca', 'Blanco'], ['Cinza', 'Gris'], ['Marinho', 'Azul marino'], ['Vermelho', 'Rojo'], ['Verde Limão', 'Verde limón'],
-  ['Tamanhos', 'Tallas'], ['Tamanho', 'Talla'], ['Talles', 'Tallas'], ['Tecnologia', 'Tecnología'], ['Descrição', 'Descripción'],
-  ['sem costura', 'sin costuras'], ['com costura', 'con costura'], ['confeccionado', 'confeccionado'], ['confeccionada', 'confeccionada'],
-  ['respirabilidade', 'respirabilidad'], ['secagem rápida', 'secado rápido'], ['suor', 'sudor'], ['bactérias', 'bacterias'], ['odores', 'olores'],
-  ['frescor', 'frescura'], ['conforto', 'comodidad'], ['durante o uso', 'durante el uso'], ['durante a prática', 'durante la práctica'],
-  ['alças', 'breteles'], ['alça', 'bretel'], ['costas', 'espalda'], ['corpo', 'cuerpo'], ['bojo removível', 'copa removible'], ['bojo', 'copa'],
-  ['cós', 'cintura'], ['bolso', 'bolsillo'], ['bolsos', 'bolsillos'], ['frontal', 'delantero'], ['traseiro', 'trasero'], ['lateral', 'lateral'],
-  ['alto suporte', 'soporte alto'], ['suporte alto', 'soporte alto'], ['suporte médio', 'soporte medio'], ['suporte leve', 'soporte leve'], ['sustenta??o', 'sujeción'],
-  ['modelagem', 'modelado'], ['ajuste confortável', 'ajuste cómodo'], ['liberdade de movimento', 'libertad de movimiento'],
-  ['ideal para', 'ideal para'], ['atividades', 'actividades'], ['baixo impacto', 'bajo impacto'], ['médio impacto', 'impacto medio'], ['alto impacto', 'alto impacto'],
-  ['dia a dia', 'uso diario'], ['toque macio', 'tacto suave'], ['macia', 'suave'], ['opaca', 'opaca'], ['superopaca', 'superopaca'],
-  ['Sem demarca??o de ponteira', 'Sin demarcación en la puntera'], ['Com demarca??o de ponteira', 'Con demarcación en la puntera'], ['ponteira', 'puntera'],
-  ['Importada', 'Importada'], ['Adulto', 'Adulto'], ['Infantil', 'Infantil']
-].sort((a, b) => b[0].length - a[0].length);
-
-function normalizeText(v) {
-  return (v || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+function cartStorageKey() {
+  return `lupo-cart-v2-${currentUser?.username || 'anon'}`;
+}
+function notesStorageKey() {
+  return `lupo-cart-notes-v1-${currentUser?.username || 'anon'}`;
+}
+function textScaleKey() {
+  return 'lupo-text-scale';
 }
 function getCodes(v) {
   return normalizeText(v).split(/[\s,;]+/).map(x => x.trim()).filter(Boolean);
 }
 function unique(arr) {
-  return [...new Set(arr.filter(Boolean))].sort((a, b) => a.localeCompare(b));
-}
-function escapeHtml(s) {
-  return (s ?? '').toString().replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-}
-function escapeRegExp(s) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-function translateText(value) {
-  let text = (value || '').toString();
-  for (const [from, to] of TRANSLATIONS) {
-    text = text.replace(new RegExp(escapeRegExp(from), 'gi'), to);
-  }
-  return text;
-}
-function formatFob(value) {
-  return Number.isFinite(value) ? `USD ${value.toFixed(2)}` : 'FOB no disponible';
+  return [...new Set(arr.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
 }
 function opt(select, values, label, translate = translateText) {
   select.innerHTML = `<option value="">${label}</option>` + values.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(translate(v))}</option>`).join('');
@@ -68,33 +42,75 @@ function sizesFrom(value) {
   return parts.length ? parts : ['Único'];
 }
 function colorLabel(c) {
-  return `${c.code} ${translateText(c.name)}`.trim();
+  const name = translateText(c.name || '').trim();
+  if (name) return name;
+  const code = String(c.code || '').trim();
+  return !code || code === '-' ? 'Sin color' : code;
+}
+function productImage(p) {
+  return assetUrl(p && p.image);
+}
+function assetUrl(src) {
+  const value = String(src || '');
+  if (!value || value.startsWith('http') || value.includes('?')) return value;
+  return `${value}?v=4`;
+}
+function colorPhoto(c) {
+  return assetUrl(c && c.image);
+}
+function selectCatalog(catalogName) {
+  $('catalogFilter').value = catalogName || '';
+  setActiveCatalog(catalogName || '');
+  syncState();
+  render();
+}
+function setActiveCatalog(catalogName) {
+  document.querySelectorAll('#mainNav [data-catalog]').forEach(btn => {
+    btn.classList.toggle('active', (btn.dataset.catalog || '') === (catalogName || ''));
+  });
+}
+function buildCatalogNav(catalogs) {
+  const nav = $('mainNav');
+  if (!nav) return;
+  nav.innerHTML = `<button type="button" data-catalog="" class="active">Todos</button>` +
+    catalogs.map(c => `<button type="button" data-catalog="${escapeHtml(c.catalog)}">${escapeHtml(catalogLabel(c.catalog))}</button>`).join('');
+  nav.querySelectorAll('[data-catalog]').forEach(btn => {
+    btn.addEventListener('click', () => selectCatalog(btn.dataset.catalog || ''));
+  });
 }
 function cartLineKey(item) {
-  return [item.code, item.size, item.colorCode].join('||');
+  return [item.code, item.size, item.colorCode, item.colorName || ''].join('||');
 }
 function loadCart() {
   try {
-    const raw = localStorage.getItem(CART_STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
+    const parsed = JSON.parse(localStorage.getItem(cartStorageKey()) || '[]');
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(item => item && item.code && item.qty > 0).map(item => {
-      if (item.fobUsd == null && item.productId) {
-        const p = products.find(x => x.id === item.productId);
-        if (p && Number.isFinite(p.fobUsd)) item.fobUsd = p.fobUsd;
-      }
-      return item;
-    });
+    return parsed.filter(item => item && item.code && item.qty > 0);
   } catch {
     return [];
   }
 }
+function loadNotes() {
+  try {
+    return String(localStorage.getItem(notesStorageKey()) || '').slice(0, 800);
+  } catch {
+    return '';
+  }
+}
 function saveCart() {
-  localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
+  localStorage.setItem(cartStorageKey(), JSON.stringify(cart));
+  localStorage.setItem(notesStorageKey(), cartNotes);
   updateCartBadge();
+  updateOrderDock();
 }
 function cartTotalQty() {
   return cart.reduce((sum, item) => sum + Number(item.qty || 0), 0);
+}
+function cartTotalArs() {
+  return cart.reduce((sum, item) => {
+    if (!Number.isFinite(item.priceArs)) return sum;
+    return sum + item.priceArs * Number(item.qty || 0);
+  }, 0);
 }
 function updateCartBadge() {
   const count = cartTotalQty();
@@ -102,6 +118,26 @@ function updateCartBadge() {
   if (!badge) return;
   badge.textContent = String(count);
   badge.hidden = count === 0;
+}
+function updateOrderDock() {
+  const dock = $('orderDock');
+  if (!dock) return;
+  const total = cartTotalQty();
+  dock.hidden = total === 0;
+  const money = cartTotalArs();
+  $('dockSummary').textContent = total
+    ? `${total} unidad${total === 1 ? '' : 'es'} · ${formatArs(money)}`
+    : 'Pedido vacío';
+}
+function applyTextScale(scale) {
+  const next = TEXT_SCALES.includes(scale) ? scale : 'md';
+  document.documentElement.dataset.text = next;
+  try { localStorage.setItem(textScaleKey(), next); } catch {}
+}
+function bumpTextScale(delta) {
+  const current = document.documentElement.dataset.text || localStorage.getItem(textScaleKey()) || 'md';
+  const idx = Math.max(0, Math.min(TEXT_SCALES.length - 1, TEXT_SCALES.indexOf(current) + delta));
+  applyTextScale(TEXT_SCALES[idx]);
 }
 function showCartMsg(text, ok = true) {
   const msg = $('cartFormMsg');
@@ -114,14 +150,48 @@ function showCartMsg(text, ok = true) {
   cartMsgTimer = setTimeout(() => { msg.hidden = true; }, 1800);
 }
 
-function init() {
-  opt($('catalogFilter'), unique(products.map(p => p.catalog)), 'Todos');
-  opt($('categoryFilter'), unique(products.map(p => p.category)), 'Todas');
-  opt($('sizeFilter'), unique(products.map(p => p.sizes).flatMap(sizesFrom)), 'Todas', v => v);
-  opt($('colorFilter'), unique(products.flatMap(p => p.colors.map(c => `${c.code} ${c.name}`))), 'Todos');
+async function init() {
+  const me = await api('/api/me');
+  currentUser = me.user;
+  whatsappNumber = me.whatsappNumber || '';
+  $('userName').textContent = currentUser.name || currentUser.username;
+  $('userList').textContent = me.priceListName ? `Lista ${me.priceListName}` : 'Sin lista asignada';
+  if (currentUser.role === 'admin') $('adminLink').hidden = false;
 
-  ['search', 'codes', 'catalogFilter', 'categoryFilter', 'sizeFilter', 'colorFilter'].forEach(id => {
-    $(id).addEventListener('input', () => { syncState(); render(); });
+  const catalog = await api('/api/catalog');
+  products = catalog.products || [];
+  cart = loadCart();
+  cartNotes = loadNotes();
+  if ($('cartNotes')) $('cartNotes').value = cartNotes;
+  applyTextScale(localStorage.getItem(textScaleKey()) || 'md');
+  updateCartBadge();
+  updateOrderDock();
+  buildCatalogNav(catalog.catalogs || []);
+
+  opt($('catalogFilter'), unique(products.map(p => p.catalog)), 'Todos', catalogLabel);
+  opt($('categoryFilter'), unique(products.map(p => p.category)), 'Todas');
+  opt($('sizeFilter'), unique(products.map(p => p.sizes).flatMap(sizesFrom)), 'Todos', v => v);
+  opt($('colorFilter'), unique(products.flatMap(p => (p.colors || []).map(colorLabel))), 'Todos', v => v);
+
+  $('headerSearchForm').addEventListener('submit', e => {
+    e.preventDefault();
+    syncState();
+    render();
+  });
+  ['search', 'codes', 'catalogFilter', 'categoryFilter', 'sizeFilter', 'colorFilter', 'badgeFilter'].forEach(id => {
+    $(id).addEventListener('input', () => {
+      syncState();
+      if (id === 'catalogFilter') setActiveCatalog(state.catalog);
+      render();
+    });
+  });
+  $('offerCards').addEventListener('click', e => {
+    const btn = e.target.closest('[data-offer]');
+    if (!btn) return;
+    const next = state.badge === btn.dataset.offer ? '' : btn.dataset.offer;
+    $('badgeFilter').value = next;
+    syncState();
+    render();
   });
   $('clearBtn').addEventListener('click', resetFilters);
   $('copyBtn').addEventListener('click', copyVisibleCodes);
@@ -130,23 +200,42 @@ function init() {
   $('closeModal').addEventListener('click', closeModal);
   $('modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
   $('addToCartForm').addEventListener('submit', onAddToCart);
+  $('easyShortcuts').addEventListener('click', onShortcutClick);
+  $('cartSizeChips').addEventListener('click', e => onChipClick(e, 'size'));
+  $('cartColorChips').addEventListener('click', e => onChipClick(e, 'color'));
+  $('addToCartForm').addEventListener('click', e => {
+    const step = e.target.closest('[data-qty-step]');
+    if (!step) return;
+    const input = $('cartQty');
+    const next = Math.max(1, (parseInt(input.value, 10) || 1) + Number(step.dataset.qtyStep));
+    input.value = String(next);
+  });
   $('cartBtn').addEventListener('click', openCart);
+  $('dockCartBtn')?.addEventListener('click', openCart);
+  $('dockSendBtn')?.addEventListener('click', sendOrderWhatsapp);
   $('closeCart').addEventListener('click', closeCart);
   $('cartDrawer').addEventListener('click', e => {
     if (e.target.matches('[data-close-cart]')) closeCart();
   });
   $('clearCartBtn').addEventListener('click', clearCart);
-  $('exportCartBtn').addEventListener('click', exportCartExcel);
+  $('sendWhatsappBtn').addEventListener('click', sendOrderWhatsapp);
+  $('cartNotes').addEventListener('input', () => {
+    cartNotes = $('cartNotes').value.slice(0, 800);
+    saveCart();
+  });
+  $('textBigger').addEventListener('click', () => bumpTextScale(1));
+  $('textSmaller').addEventListener('click', () => bumpTextScale(-1));
   $('cartItems').addEventListener('click', onCartItemsClick);
   $('cartItems').addEventListener('change', onCartItemsChange);
+  $('logoutBtn').addEventListener('click', logout);
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
     if ($('cartDrawer').classList.contains('open')) closeCart();
     else closeModal();
   });
-  updateCartBadge();
   render();
 }
+
 function syncState() {
   state.search = $('search').value;
   state.codes = $('codes').value;
@@ -154,88 +243,268 @@ function syncState() {
   state.category = $('categoryFilter').value;
   state.size = $('sizeFilter').value;
   state.color = $('colorFilter').value;
+  state.badge = $('badgeFilter') ? $('badgeFilter').value : '';
 }
 function resetFilters() {
-  ['search', 'codes', 'catalogFilter', 'categoryFilter', 'sizeFilter', 'colorFilter'].forEach(id => $(id).value = '');
+  ['search', 'codes', 'catalogFilter', 'categoryFilter', 'sizeFilter', 'colorFilter', 'badgeFilter'].forEach(id => { if ($(id)) $(id).value = ''; });
+  setActiveCatalog('');
   syncState();
   render();
 }
 function setView(view) {
   state.view = view;
   document.body.classList.toggle('list', view === 'list');
-  $('gridBtn').classList.toggle('primary', view === 'grid');
-  $('listBtn').classList.toggle('primary', view === 'list');
+  $('gridBtn').classList.toggle('btn-black', view === 'grid');
+  $('gridBtn').classList.toggle('btn-ghost', view !== 'grid');
+  $('listBtn').classList.toggle('btn-black', view === 'list');
+  $('listBtn').classList.toggle('btn-ghost', view !== 'list');
 }
 function filtered() {
-  const q = normalizeText(state.search), wantedCodes = getCodes(state.codes), wantedColor = normalizeText(state.color);
+  const q = normalizeText(state.search);
+  const wantedCodes = getCodes(state.codes);
+  const wantedColor = normalizeText(state.color);
   return products.filter(p => {
-    const translatedBlob = translateText([p.code, p.name, p.category, p.catalog, p.sizes, p.description, ...p.tech, p.colors.map(c => `${c.code} ${c.name}`).join(' ')].join(' '));
-    const blob = normalizeText([translatedBlob, p.code, p.name, p.category, p.catalog, p.sizes, p.description, ...p.tech, p.colors.map(c => `${c.code} ${c.name}`).join(' ')].join(' '));
+    const translatedBlob = translateText([p.code, p.name, p.category, p.catalog, p.sizes, p.description, ...(p.tech || []), (p.colors || []).map(c => `${c.code} ${c.name}`).join(' ')].join(' '));
+    const blob = normalizeText([translatedBlob, p.code, p.name, p.category, p.catalog, p.sizes, p.description, ...(p.tech || []), (p.colors || []).map(c => `${c.code} ${c.name}`).join(' ')].join(' '));
     if (q && !blob.includes(q)) return false;
     if (wantedCodes.length && !wantedCodes.some(c => normalizeText(p.code).includes(c))) return false;
     if (state.catalog && p.catalog !== state.catalog) return false;
     if (state.category && p.category !== state.category) return false;
     if (state.size && !normalizeText(p.sizes).includes(normalizeText(state.size))) return false;
-    if (state.color && !p.colors.some(c => normalizeText(`${c.code} ${c.name}`).includes(wantedColor))) return false;
+    if (state.color && !(p.colors || []).some(c => normalizeText(colorLabel(c)).includes(wantedColor))) return false;
+    if (state.badge && p.badge !== state.badge) return false;
     return true;
-  }).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
+  }).sort((a, b) => {
+    const aw = a.badge ? 0 : 1;
+    const bw = b.badge ? 0 : 1;
+    if (aw !== bw) return aw - bw;
+    return a.code.localeCompare(b.code, undefined, { numeric: true });
+  });
+}
+function offerTagHtml(p) {
+  const info = badgeInfo(p.badge);
+  if (!info) return '';
+  return `<span class="offer-tag ${info.className}">${escapeHtml(badgeLabel(p.badge, p.badgeText))}</span>`;
+}
+
+function renderOfferCards() {
+  const wrap = $('offerCards');
+  if (!wrap) return;
+  const counts = { promo: 0, last: 0, sale: 0 };
+  products.forEach(p => { if (counts[p.badge] != null) counts[p.badge] += 1; });
+  const cards = Object.values(PRODUCT_BADGES).filter(b => counts[b.id] > 0);
+  wrap.hidden = !cards.length;
+  wrap.innerHTML = cards.map(b => `
+    <button type="button" class="offer-card ${b.className} ${state.badge === b.id ? 'active' : ''}" data-offer="${b.id}">
+      <b>${escapeHtml(b.label)}</b>
+      <span>${counts[b.id]} ${counts[b.id] === 1 ? 'artículo' : 'artículos'}</span>
+    </button>
+  `).join('');
 }
 function render() {
+  renderOfferCards();
   const data = filtered();
   $('resultCount').textContent = data.length;
   $('empty').style.display = data.length ? 'none' : 'block';
   const grid = $('grid');
   grid.innerHTML = data.map(card).join('');
   grid.querySelectorAll('[data-open]').forEach(btn => btn.addEventListener('click', () => openModal(btn.dataset.open)));
+  grid.querySelectorAll('[data-open-shortcut]').forEach(btn => {
+    btn.addEventListener('click', () => openModal(btn.dataset.openShortcut, btn.dataset.shortcut));
+  });
+  grid.querySelectorAll('[data-card-color]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const img = btn.closest('.product')?.querySelector('.thumb img');
+      if (img && btn.dataset.src) img.src = btn.dataset.src;
+    });
+  });
 }
 function card(p) {
-  const colorPreview = p.colors.slice(0, 6).map(c => `<span class="swatch">${escapeHtml(c.code)} ${escapeHtml(translateText(c.name))}</span>`).join('') + (p.colors.length > 6 ? `<span class="swatch">+${p.colors.length - 6}</span>` : '');
-  return `<article class="product"><div class="thumb"><img loading="lazy" src="${p.image}" alt="${escapeHtml(translateText(p.name))}"><span class="badge">${escapeHtml(p.code)}</span></div><div class="info"><h4>${escapeHtml(translateText(p.name))}</h4><div class="price-row"><span>FOB</span><strong>${escapeHtml(formatFob(p.fobUsd))}</strong></div><div class="meta"><span class="pill">${escapeHtml(translateText(p.category))}</span><span class="pill">${escapeHtml(translateText(p.catalog))}</span></div><p class="desc">${escapeHtml(translateText(p.description || 'Sin descripción cargada.'))}</p><div class="swatches">${colorPreview || '<span class="swatch">Sin colores detectados</span>'}</div><div class="card-actions"><button class="btn primary" data-open="${p.id}">Ver detalle</button><a class="btn" href="${p.pdf}#page=${p.page}" target="_blank">PDF</a></div></div></article>`;
+  const colorPreview = (p.colors || []).map(c => {
+    const src = colorPhoto(c);
+    const label = escapeHtml(colorLabel(c));
+    if (src) {
+      return `<button type="button" class="swatch swatch-photo" data-card-color data-src="${escapeHtml(src)}"><img src="${escapeHtml(src)}" alt="${label}"><span>${label}</span></button>`;
+    }
+    return `<span class="swatch">${label}</span>`;
+  }).join('');
+  const priced = Number.isFinite(p.priceArs);
+  return `<article class="product">
+    <div class="thumb"><img loading="lazy" src="${productImage(p)}" alt="${escapeHtml(translateText(p.name))}"><span class="badge">${escapeHtml(p.code)}</span>${offerTagHtml(p)}</div>
+    <div class="info">
+      <h4>${escapeHtml(translateText(p.name))}</h4>
+      <div class="price ${priced ? '' : 'muted'}">${escapeHtml(formatArs(p.priceArs))}</div>
+      <div class="meta"><span class="pill">${escapeHtml(catalogLabel(p.catalog))}</span><span class="pill">${escapeHtml(translateText(p.category))}</span></div>
+      <p class="desc">${escapeHtml(translateText(p.description || 'Sin descripción cargada.'))}</p>
+      <div class="swatches">${colorPreview || '<span class="swatch">Sin colores detectados</span>'}</div>
+      <div class="card-actions">
+        <button class="btn btn-black" data-open="${p.id}">Pedir</button>
+      </div>
+      <div class="easy-shortcuts card-shortcuts">
+        <button type="button" data-open-shortcut="${p.id}" data-shortcut="sizes">Talles surtidos</button>
+        <button type="button" data-open-shortcut="${p.id}" data-shortcut="colors">Colores surtido</button>
+        <button type="button" data-open-shortcut="${p.id}" data-shortcut="both">Todo surtido</button>
+      </div>
+    </div>
+  </article>`;
 }
 
-function fillCartForm(p) {
+function fillCartForm(p, shortcut = '') {
   $('cartProductId').value = p.id;
-  const sizeSelect = $('cartSize');
-  const colorSelect = $('cartColor');
   const sizes = sizesFrom(p.sizes);
-  sizeSelect.innerHTML = sizes.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
-  const colors = p.colors.length ? p.colors : [{ code: '-', name: 'Sin color' }];
-  colorSelect.innerHTML = colors.map(c => `<option value="${escapeHtml(c.code)}" data-name="${escapeHtml(translateText(c.name))}">${escapeHtml(colorLabel(c))}</option>`).join('');
+  const colors = (p.colors && p.colors.length) ? p.colors : [{ code: '-', name: 'Sin color' }];
+  $('cartSizeChips').innerHTML = sizes.map(s =>
+    `<button type="button" class="choice-chip" data-size="${escapeHtml(s)}">${escapeHtml(s)}</button>`
+  ).join('');
+  $('cartColorChips').innerHTML = colors.map(c => {
+    const src = colorPhoto(c);
+    const img = src ? `<img src="${escapeHtml(src)}" alt="">` : '';
+    return `<button type="button" class="choice-chip color-photo-chip" data-color="${escapeHtml(c.code)}" data-name="${escapeHtml(translateText(c.name))}" data-image="${escapeHtml(src)}">${img}<span>${escapeHtml(colorLabel(c))}</span></button>`;
+  }).join('');
   $('cartQty').value = 1;
   $('cartFormMsg').hidden = true;
+  if (shortcut) {
+    applyShortcut(shortcut, { silent: true });
+  } else {
+    if (sizes.length === 1) selectSize(sizes[0]);
+    else selectSize('');
+    if (colors.length === 1) selectColor(colors[0].code, translateText(colors[0].name));
+    else selectColor('', '');
+  }
 }
 
-function openModal(id) {
+function selectSize(value) {
+  $('cartSize').value = value || '';
+  $('cartSizeChips').querySelectorAll('.choice-chip').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.size === value);
+  });
+  syncShortcutButtons();
+}
+function selectColor(code, name) {
+  $('cartColor').value = code || '';
+  $('cartColor').dataset.name = name || '';
+  $('cartColorChips').querySelectorAll('.choice-chip').forEach(btn => {
+    const same = btn.dataset.color === code && (btn.dataset.name === name || !name);
+    btn.classList.toggle('active', Boolean(code) && same);
+  });
+  if (modalProduct && $('modalImage')) {
+    if (code === SURTIDO_COLOR) {
+      $('modalImage').src = productImage(modalProduct);
+    } else {
+      const chip = [...$('cartColorChips').querySelectorAll('.choice-chip')].find(btn => btn.classList.contains('active'));
+      $('modalImage').src = (chip && chip.dataset.image) || productImage(modalProduct);
+    }
+  }
+  syncShortcutButtons();
+}
+function currentShortcut() {
+  const sizeSurtido = $('cartSize').value === SURTIDO_SIZE;
+  const colorSurtido = $('cartColor').value === SURTIDO_COLOR;
+  if (sizeSurtido && colorSurtido) return 'both';
+  if (sizeSurtido) return 'sizes';
+  if (colorSurtido) return 'colors';
+  return '';
+}
+function syncShortcutButtons() {
+  const active = currentShortcut();
+  document.querySelectorAll('#easyShortcuts [data-shortcut]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.shortcut === active);
+  });
+}
+function applyShortcut(type, { silent } = {}) {
+  if (!modalProduct && !silent) return;
+  if (type === 'sizes') {
+    selectSize(SURTIDO_SIZE);
+    if ($('cartColor').value === SURTIDO_COLOR) {
+      const first = $('cartColorChips').querySelector('.choice-chip');
+      if (first) selectColor(first.dataset.color, first.dataset.name);
+    }
+  } else if (type === 'colors') {
+    selectColor(SURTIDO_COLOR, SURTIDO_COLOR_NAME);
+    if ($('cartSize').value === SURTIDO_SIZE) {
+      const first = $('cartSizeChips').querySelector('.choice-chip');
+      if (first) selectSize(first.dataset.size);
+    }
+  } else if (type === 'both') {
+    selectSize(SURTIDO_SIZE);
+    selectColor(SURTIDO_COLOR, SURTIDO_COLOR_NAME);
+  } else if (!type) {
+    syncShortcutButtons();
+  }
+  if (!silent && type) {
+    const labels = { sizes: 'Talles surtidos', colors: 'Colores surtido', both: 'Todo surtido' };
+    showCartMsg(`${labels[type]}. Elegí cantidad y agregá.`);
+  }
+}
+function onShortcutClick(e) {
+  const btn = e.target.closest('[data-shortcut]');
+  if (!btn) return;
+  const next = currentShortcut() === btn.dataset.shortcut ? '' : btn.dataset.shortcut;
+  if (!next) {
+    const firstSize = $('cartSizeChips').querySelector('.choice-chip');
+    const firstColor = $('cartColorChips').querySelector('.choice-chip');
+    selectSize(firstSize?.dataset.size || '');
+    selectColor(firstColor?.dataset.color || '', firstColor?.dataset.name || '');
+    return;
+  }
+  applyShortcut(next);
+}
+function onChipClick(e, kind) {
+  const btn = e.target.closest('.choice-chip');
+  if (!btn) return;
+  if (kind === 'size') {
+    selectSize(btn.dataset.size);
+  } else {
+    selectColor(btn.dataset.color, btn.dataset.name);
+  }
+}
+
+function openModal(id, shortcut = '') {
   const p = products.find(x => x.id === id);
   if (!p) return;
-  $('modalImage').src = p.image;
+  modalProduct = p;
+  $('modalImage').src = productImage(p);
+  const offer = $('modalOffer');
+  const info = badgeInfo(p.badge);
+  if (offer) {
+    offer.hidden = !info;
+    offer.className = `offer-tag ${info ? info.className : ''}`;
+    offer.textContent = info ? badgeLabel(p.badge, p.badgeText) : '';
+  }
   $('modalTitle').textContent = translateText(p.name);
   $('modalCode').textContent = p.code;
+  $('modalPrice').textContent = formatArs(p.priceArs);
+  $('modalPrice').classList.toggle('muted', !Number.isFinite(p.priceArs));
   $('modalDesc').textContent = translateText(p.description || '');
-  fillCartForm(p);
-  $('modalMeta').innerHTML = `<tr><td>FOB</td><td>${escapeHtml(formatFob(p.fobUsd))}</td></tr><tr><td>Catálogo</td><td>${escapeHtml(translateText(p.catalog))}</td></tr><tr><td>Categoría</td><td>${escapeHtml(translateText(p.category))}</td></tr><tr><td>Tallas</td><td>${escapeHtml(p.sizes || 'No detectado')}</td></tr><tr><td>Colores</td><td>${p.colors.map(c => `${escapeHtml(c.code)} ${escapeHtml(translateText(c.name))}`).join('<br>') || 'No detectado'}</td></tr><tr><td>Tecnología</td><td>${p.tech.map(t => escapeHtml(translateText(t))).join(' · ') || 'No detectado'}</td></tr><tr><td>Origen</td><td><a href="${p.pdf}#page=${p.page}" target="_blank">Abrir PDF original, página ${p.page}</a></td></tr>`;
+  fillCartForm(p, shortcut);
+  $('modalMeta').innerHTML = `
+    <tr><td>Precio</td><td>${escapeHtml(formatArs(p.priceArs))}</td></tr>
+    <tr><td>Catálogo</td><td>${escapeHtml(catalogLabel(p.catalog))}</td></tr>
+    <tr><td>Categoría</td><td>${escapeHtml(translateText(p.category))}</td></tr>
+    <tr><td>Talles</td><td>${escapeHtml(p.sizes || 'No detectado')}</td></tr>
+    <tr><td>Colores</td><td>${(p.colors || []).map(c => escapeHtml(colorLabel(c))).join('<br>') || 'No detectado'}</td></tr>
+    <tr><td>Tecnología</td><td>${(p.tech || []).map(t => escapeHtml(translateText(t))).join(' · ') || 'No detectado'}</td></tr>
+    <tr><td>Origen</td><td>${p.pdf ? `<a href="${p.pdf.startsWith('http') ? p.pdf : `${p.pdf}#page=${p.page}`}" target="_blank">Ver catálogo${p.page ? `, página ${p.page}` : ''}</a>` : '—'}</td></tr>`;
   $('modal').classList.add('open');
 }
-
 function closeModal() {
   $('modal').classList.remove('open');
+  modalProduct = null;
 }
 
 function onAddToCart(e) {
   e.preventDefault();
-  const productId = $('cartProductId').value;
-  const p = products.find(x => x.id === productId);
+  const p = products.find(x => x.id === $('cartProductId').value);
   if (!p) {
     showCartMsg('No se encontró el producto.', false);
     return;
   }
   const size = $('cartSize').value;
   const colorCode = $('cartColor').value;
-  const colorOption = $('cartColor').selectedOptions[0];
-  const colorName = colorOption?.dataset.name || colorOption?.textContent || '';
+  const colorName = $('cartColor').dataset.name || '';
   const qty = Math.max(1, parseInt($('cartQty').value, 10) || 1);
   if (!size || !colorCode) {
-    showCartMsg('Elegí talle y color.', false);
+    showCartMsg('Elegí talle y color, o un atajo de surtido.', false);
     return;
   }
   const incoming = {
@@ -245,14 +514,14 @@ function onAddToCart(e) {
     size,
     colorCode,
     colorName,
-    fobUsd: Number.isFinite(p.fobUsd) ? p.fobUsd : null,
+    priceArs: Number.isFinite(p.priceArs) ? p.priceArs : null,
     qty
   };
   const key = cartLineKey(incoming);
   const existing = cart.find(item => cartLineKey(item) === key);
   if (existing) {
     existing.qty += qty;
-    if (existing.fobUsd == null && incoming.fobUsd != null) existing.fobUsd = incoming.fobUsd;
+    if (existing.priceArs == null && incoming.priceArs != null) existing.priceArs = incoming.priceArs;
   } else {
     cart.push(incoming);
   }
@@ -272,17 +541,18 @@ function closeCart() {
 }
 function renderCart() {
   const total = cartTotalQty();
+  const money = cartTotalArs();
   $('cartSummary').textContent = total
-    ? `${cart.length} línea${cart.length === 1 ? '' : 's'} · ${total} unidad${total === 1 ? '' : 'es'}`
+    ? `${cart.length} línea${cart.length === 1 ? '' : 's'} · ${total} unidad${total === 1 ? '' : 'es'} · ${formatArs(money)}`
     : 'Sin artículos';
-  $('exportCartBtn').disabled = !cart.length;
   $('clearCartBtn').disabled = !cart.length;
-
+  if ($('sendWhatsappBtn')) $('sendWhatsappBtn').disabled = !cart.length;
+  if ($('sendWhatsappBtn')) $('sendWhatsappBtn').disabled = !cart.length;
+  if ($('cartNotes') && $('cartNotes').value !== cartNotes) $('cartNotes').value = cartNotes;
   if (!cart.length) {
     $('cartItems').innerHTML = `<div class="cart-empty"><p>Todavía no agregaste productos.</p><p>Abrí un producto, elegí talle, color y cantidad, y sumalo al pedido.</p></div>`;
     return;
   }
-
   $('cartItems').innerHTML = cart.map((item, index) => `
     <article class="cart-line" data-index="${index}">
       <div class="cart-line-main">
@@ -290,8 +560,8 @@ function renderCart() {
         <span class="cart-line-name">${escapeHtml(item.name || '')}</span>
         <div class="cart-line-meta">
           <span>Talle: <b>${escapeHtml(item.size)}</b></span>
-          <span>Color: <b>${escapeHtml(item.colorCode)}${item.colorName ? ' ' + escapeHtml(item.colorName) : ''}</b></span>
-          <span>FOB: <b>${escapeHtml(formatFob(item.fobUsd))}</b></span>
+          <span>Color: <b>${escapeHtml(item.colorName || item.colorCode)}</b></span>
+          <span>Precio: <b>${escapeHtml(formatArs(item.priceArs))}</b></span>
         </div>
       </div>
       <div class="cart-line-actions">
@@ -299,7 +569,7 @@ function renderCart() {
           Cant.
           <input type="number" min="1" step="1" value="${item.qty}" data-qty="${index}">
         </label>
-        <button type="button" class="btn" data-remove="${index}">Quitar</button>
+        <button type="button" class="btn btn-ghost" data-remove="${index}">Quitar</button>
       </div>
     </article>
   `).join('');
@@ -332,59 +602,55 @@ function clearCart() {
   renderCart();
 }
 
-function escapeXml(value) {
-  return (value ?? '').toString()
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-function exportCartExcel() {
-  if (!cart.length) {
-    alert('El pedido está vacío.');
-    return;
-  }
-  const header = ['Codigo', 'Talle', 'Color', 'Cantidad', 'FOB', 'Total FOB'];
-  const body = cart.map(item => {
-    const fob = Number.isFinite(item.fobUsd) ? item.fobUsd : null;
-    const total = fob != null ? fob * Number(item.qty || 0) : null;
-    return [
-      item.code,
-      item.size,
-      item.colorName ? `${item.colorCode} ${item.colorName}` : item.colorCode,
-      String(item.qty),
-      fob != null ? fob.toFixed(4) : '',
-      total != null ? total.toFixed(4) : ''
-    ];
-  });
-  const allRows = [header, ...body];
-  const numberCols = new Set([3, 4, 5]);
-  const xmlRows = allRows.map((row, rowIndex) => {
-    const cells = row.map((cell, colIndex) => {
-      const isNumber = rowIndex > 0 && numberCols.has(colIndex) && cell !== '';
-      const type = isNumber ? 'Number' : 'String';
-      return `<Cell><Data ss:Type="${type}">${escapeXml(cell)}</Data></Cell>`;
-    }).join('');
-    return `<Row>${cells}</Row>`;
-  }).join('');
-  const xml = `<?xml version="1.0"?>
-<?mso-application progid="Excel.Sheet"?>
-<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
- <Worksheet ss:Name="Pedido">
-  <Table>${xmlRows}</Table>
- </Worksheet>
-</Workbook>`;
+function downloadExcelFile(xml, filename) {
   const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
-  const date = new Date().toISOString().slice(0, 10);
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `pedido-lupo-${date}.xls`;
+  a.download = filename || `pedido-lupo.xls`;
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+}
+
+async function sendOrderWhatsapp() {
+  if (!cart.length) {
+    alert('El pedido está vacío.');
+    return;
+  }
+  const btn = $('sendWhatsappBtn');
+  const dockBtn = $('dockSendBtn');
+  if (btn) btn.disabled = true;
+  if (dockBtn) dockBtn.disabled = true;
+  try {
+    const data = await api('/api/orders', {
+      method: 'POST',
+      body: { items: cart, notes: cartNotes }
+    });
+    if (data.whatsappUrl) {
+      window.open(data.whatsappUrl, '_blank', 'noopener');
+      return;
+    }
+    const file = new File([data.xml], data.filename || 'pedido-lupo.xls', { type: 'application/vnd.ms-excel' });
+    try {
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'Pedido Lupo', text: data.message });
+        return;
+      }
+    } catch (err) {
+      if (err.name === 'AbortError') return;
+    }
+    if (data.xml) downloadExcelFile(data.xml, data.filename);
+    const text = encodeURIComponent(data.message || 'Pedido Lupo');
+    window.open(`https://wa.me/?text=${text}`, '_blank', 'noopener');
+    alert('Configurá tu número de WhatsApp en Administración para que el pedido te llegue directo.');
+  } catch (err) {
+    alert(err.message || 'No se pudo enviar el pedido.');
+  } finally {
+    if (btn) btn.disabled = !cart.length;
+    if (dockBtn) dockBtn.disabled = !cart.length;
+  }
 }
 
 async function copyVisibleCodes() {
@@ -393,8 +659,14 @@ async function copyVisibleCodes() {
     await navigator.clipboard.writeText(codes);
     $('copyBtn').textContent = 'Copiado';
     setTimeout(() => $('copyBtn').textContent = 'Copiar códigos visibles', 1200);
-  } catch (e) {
+  } catch {
     alert(codes);
   }
 }
-init();
+
+init().catch(err => {
+  if (err.message !== 'No autenticado') {
+    console.error(err);
+    alert(err.message || 'No se pudo cargar el catálogo');
+  }
+});

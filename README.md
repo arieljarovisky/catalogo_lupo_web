@@ -1,16 +1,31 @@
-# Catálogo Lupo Web
+# Catálogo Lupo B2B
 
-Abrí `index.html` en Chrome o Edge.
+Catálogo mayorista con usuarios, listas de precios en pesos y panel de administración, con estilo inspirado en [multilupo.com.ar](https://www.multilupo.com.ar).
 
-Funciones incluidas:
-- búsqueda por código, nombre, categoría, catálogo, color, talle y tecnología;
-- campo especial para pegar varios códigos separados por coma, espacio o salto de línea;
-- vista en grilla o lista;
-- botón para copiar los códigos visibles;
-- ficha ampliada de cada producto;
-- acceso a la página original del PDF.
+## Cómo iniciarlo
 
-Productos cargados: 466
-Catálogos cargados: 8
+En la carpeta del proyecto:
 
-Nota: la extracción fue automática desde PDFs, por eso conviene validar contra el PDF original cuando vayas a comprar o cargar un producto.
+```
+npm install
+npm start
+```
+
+Después abrí [http://localhost:3000](http://localhost:3000).
+
+## Accesos iniciales
+
+- Administrador: `admin` / `admin123`
+- Cliente demo: `cliente` / `cliente123`
+
+Cambiá estas claves desde el panel de usuarios.
+
+## Qué incluye
+
+- Login por usuario.
+- Cada cliente ve solo los productos publicados y el precio de **su lista**.
+- Si un producto no tiene precio en esa lista, se muestra **Consultar**.
+- Panel admin: publicar/ocultar productos, crear y editar listas de precios en ARS, alta de usuarios y asignación de lista.
+- Pedido con talle, color y cantidad, exportable a Excel con precios en pesos.
+
+Los datos de ficha se extraen de los PDF en `pdfs/nuevos-catalogos/` (Boxers y slips, Lencería y Medias 2026).
