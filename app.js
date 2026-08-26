@@ -308,26 +308,11 @@ function render() {
   $('empty').style.display = data.length ? 'none' : 'block';
   const grid = $('grid');
   grid.innerHTML = data.map(card).join('');
-  grid.querySelectorAll('[data-open]').forEach(btn => btn.addEventListener('click', () => openModal(btn.dataset.open)));
   grid.querySelectorAll('[data-open-shortcut]').forEach(btn => {
     btn.addEventListener('click', () => openModal(btn.dataset.openShortcut, btn.dataset.shortcut));
   });
-  grid.querySelectorAll('[data-card-color]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const img = btn.closest('.product')?.querySelector('.thumb img');
-      if (img && btn.dataset.src) img.src = btn.dataset.src;
-    });
-  });
 }
 function card(p) {
-  const colorPreview = (p.colors || []).map(c => {
-    const src = colorPhoto(c);
-    const label = escapeHtml(colorLabel(c));
-    if (src) {
-      return `<button type="button" class="swatch swatch-photo" data-card-color data-src="${escapeHtml(src)}"><img src="${escapeHtml(src)}" alt="${label}"><span>${label}</span></button>`;
-    }
-    return `<span class="swatch">${label}</span>`;
-  }).join('');
   const priced = Number.isFinite(p.priceArs);
   return `<article class="product">
     <div class="thumb"><img loading="lazy" src="${productImage(p)}" alt="${escapeHtml(translateText(p.name))}"><span class="badge">${escapeHtml(p.code)}</span>${offerTagHtml(p)}</div>
@@ -336,14 +321,8 @@ function card(p) {
       <div class="price ${priced ? '' : 'muted'}">${escapeHtml(formatArs(p.priceArs))}</div>
       <div class="meta"><span class="pill">${escapeHtml(catalogLabel(p.catalog))}</span><span class="pill">${escapeHtml(translateText(p.category))}</span></div>
       <p class="desc">${escapeHtml(translateText(p.description || 'Sin descripción cargada.'))}</p>
-      <div class="swatches">${colorPreview || '<span class="swatch">Sin colores detectados</span>'}</div>
       <div class="card-actions">
-        <button class="btn btn-black" data-open="${p.id}">Pedir</button>
-      </div>
-      <div class="easy-shortcuts card-shortcuts">
-        <button type="button" data-open-shortcut="${p.id}" data-shortcut="sizes">Talles surtidos</button>
-        <button type="button" data-open-shortcut="${p.id}" data-shortcut="colors">Colores surtido</button>
-        <button type="button" data-open-shortcut="${p.id}" data-shortcut="both">Todo surtido</button>
+        <button class="btn btn-black" data-open-shortcut="${p.id}" data-shortcut="colors">Pedir</button>
       </div>
     </div>
   </article>`;
