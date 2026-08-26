@@ -58,9 +58,11 @@ function productImage(p) {
   return assetUrl(p && p.image);
 }
 function assetUrl(src) {
-  const value = String(src || '');
-  if (!value || value.startsWith('http') || value.includes('?')) return value;
-  return `${value}?v=4`;
+  const value = String(src || '').trim();
+  if (!value) return '';
+  if (/^(https?:|data:|blob:)/i.test(value)) return value;
+  const path = value.startsWith('/') ? value : `/${value}`;
+  return path.includes('?') ? path : `${path}?v=4`;
 }
 function colorPhoto(c) {
   return assetUrl(c && c.image);

@@ -17,9 +17,11 @@
     return `lupo-cart-notes-v1-brasil-${currentUser?.username || 'anon'}`;
   }
   function assetUrl(src) {
-    const value = String(src || '');
-    if (!value || value.startsWith('http') || value.includes('?')) return value;
-    return `${value}?v=4`;
+    const value = String(src || '').trim();
+    if (!value) return '';
+    if (/^(https?:|data:|blob:)/i.test(value)) return value;
+    const path = value.startsWith('/') ? value : `/${value}`;
+    return path.includes('?') ? path : `${path}?v=4`;
   }
   function normalizeCodeKey(code) {
     return String(code || '').trim().toUpperCase().replace(/^0+/, '').replace(/[^A-Z0-9]/g, '');
@@ -66,22 +68,23 @@
     return productByCode.get(key) || null;
   }
   function lineImage(item) {
-    if (item.image) return assetUrl(item.image);
     const product = findProduct(item);
-    if (!product) return '';
     const code = String(item.colorCode || '');
-    if (code && code !== SURTIDO_COLOR && code !== '-') {
-      const color = (product.colors || []).find(c => String(c.code) === code);
+    if (product && code && code !== SURTIDO_COLOR && code !== '-') {
+      const color = (product.colors || []).find(c => String(c.code) === code)
+        || (product.colors || []).find(c => normalizeText(c.name) === normalizeText(item.colorName || ''))
+        || (product.colors || []).find(c => normalizeText(translateText(c.name || '')) === normalizeText(item.colorName || ''));
       if (color?.image) return assetUrl(color.image);
-      const byName = (product.colors || []).find(c => normalizeText(c.name) === normalizeText(item.colorName || ''));
-      if (byName?.image) return assetUrl(byName.image);
     }
-    return assetUrl(product.image);
+    if (item.image) return assetUrl(item.image);
+    if (product?.image) return assetUrl(product.image);
+    return '';
   }
   function enrichCartImages() {
     cart = cart.map(item => {
       const src = lineImage(item);
-      return src ? { ...item, image: src.replace(/\?v=\d+$/, '') } : item;
+      if (!src) return { ...item, image: '' };
+      return { ...item, image: src.replace(/\?v=\d+$/, '').replace(/^\//, '') };
     });
     saveCart();
   }
