@@ -376,36 +376,12 @@ button, input, select, textarea { font: inherit; }
 .table td:first-child { color: var(--muted); font-weight: 700; width: 120px; }
 .cart-form { margin: 16px 0; padding: 16px; border: 1px solid var(--line); background: var(--soft); border-radius: var(--radius); }
 .cart-form .field { margin-bottom: 12px; }
-.shortcut-label {
-  margin: 0 0 8px;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.easy-shortcuts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 14px;
-}
-.easy-shortcuts button {
-  border: 2px solid var(--black);
-  background: #fff;
-  color: var(--black);
-  font: inherit;
-  font-weight: 800;
+.surtido-note {
+  margin: 0;
   font-size: 14px;
-  padding: 12px 14px;
-  min-height: 48px;
-  border-radius: var(--radius);
-  cursor: pointer;
+  font-weight: 700;
+  color: var(--ink);
 }
-.easy-shortcuts button.active,
-.easy-shortcuts button:hover { background: var(--black); color: #fff; }
-.card-shortcuts { margin-top: 8px; }
-.card-shortcuts button { flex: 1; font-size: 12px; padding: 10px 8px; min-height: 44px; }
 .choice-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .choice-chip {
   border: 2px solid var(--line);
@@ -485,13 +461,11 @@ button, input, select, textarea { font: inherit; }
 
 html[data-text="lg"] { font-size: 18px; }
 html[data-text="lg"] .btn,
-html[data-text="lg"] .easy-shortcuts button,
 html[data-text="lg"] .choice-chip { font-size: 16px; min-height: 52px; }
 html[data-text="lg"] .info h4 { font-size: 18px; min-height: 0; }
 html[data-text="lg"] .price { font-size: 22px; }
 html[data-text="xl"] { font-size: 20px; }
 html[data-text="xl"] .btn,
-html[data-text="xl"] .easy-shortcuts button,
 html[data-text="xl"] .choice-chip { font-size: 18px; min-height: 56px; }
 html[data-text="xl"] .info h4 { font-size: 20px; min-height: 0; }
 html[data-text="xl"] .price { font-size: 24px; }

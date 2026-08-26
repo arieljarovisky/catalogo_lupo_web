@@ -200,9 +200,7 @@ async function init() {
   $('closeModal').addEventListener('click', closeModal);
   $('modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
   $('addToCartForm').addEventListener('submit', onAddToCart);
-  $('easyShortcuts').addEventListener('click', onShortcutClick);
   $('cartSizeChips').addEventListener('click', e => onChipClick(e, 'size'));
-  $('cartColorChips').addEventListener('click', e => onChipClick(e, 'color'));
   $('addToCartForm').addEventListener('click', e => {
     const step = e.target.closest('[data-qty-step]');
     if (!step) return;
@@ -331,24 +329,18 @@ function card(p) {
 function fillCartForm(p, shortcut = '') {
   $('cartProductId').value = p.id;
   const sizes = sizesFrom(p.sizes);
-  const colors = (p.colors && p.colors.length) ? p.colors : [{ code: '-', name: 'Sin color' }];
   $('cartSizeChips').innerHTML = sizes.map(s =>
     `<button type="button" class="choice-chip" data-size="${escapeHtml(s)}">${escapeHtml(s)}</button>`
   ).join('');
-  $('cartColorChips').innerHTML = colors.map(c => {
-    const src = colorPhoto(c);
-    const img = src ? `<img src="${escapeHtml(src)}" alt="">` : '';
-    return `<button type="button" class="choice-chip color-photo-chip" data-color="${escapeHtml(c.code)}" data-name="${escapeHtml(translateText(c.name))}" data-image="${escapeHtml(src)}">${img}<span>${escapeHtml(colorLabel(c))}</span></button>`;
-  }).join('');
   $('cartQty').value = 1;
   $('cartFormMsg').hidden = true;
-  if (shortcut) {
-    applyShortcut(shortcut, { silent: true });
+  selectColor(SURTIDO_COLOR, SURTIDO_COLOR_NAME);
+  if (shortcut === 'sizes' || shortcut === 'both') {
+    selectSize(SURTIDO_SIZE);
+  } else if (sizes.length === 1) {
+    selectSize(sizes[0]);
   } else {
-    if (sizes.length === 1) selectSize(sizes[0]);
-    else selectSize('');
-    if (colors.length === 1) selectColor(colors[0].code, translateText(colors[0].name));
-    else selectColor('', '');
+    selectSize('');
   }
 }
 
@@ -357,85 +349,18 @@ function selectSize(value) {
   $('cartSizeChips').querySelectorAll('.choice-chip').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.size === value);
   });
-  syncShortcutButtons();
 }
 function selectColor(code, name) {
   $('cartColor').value = code || '';
   $('cartColor').dataset.name = name || '';
-  $('cartColorChips').querySelectorAll('.choice-chip').forEach(btn => {
-    const same = btn.dataset.color === code && (btn.dataset.name === name || !name);
-    btn.classList.toggle('active', Boolean(code) && same);
-  });
   if (modalProduct && $('modalImage')) {
-    if (code === SURTIDO_COLOR) {
-      $('modalImage').src = productImage(modalProduct);
-    } else {
-      const chip = [...$('cartColorChips').querySelectorAll('.choice-chip')].find(btn => btn.classList.contains('active'));
-      $('modalImage').src = (chip && chip.dataset.image) || productImage(modalProduct);
-    }
+    $('modalImage').src = productImage(modalProduct);
   }
-  syncShortcutButtons();
-}
-function currentShortcut() {
-  const sizeSurtido = $('cartSize').value === SURTIDO_SIZE;
-  const colorSurtido = $('cartColor').value === SURTIDO_COLOR;
-  if (sizeSurtido && colorSurtido) return 'both';
-  if (sizeSurtido) return 'sizes';
-  if (colorSurtido) return 'colors';
-  return '';
-}
-function syncShortcutButtons() {
-  const active = currentShortcut();
-  document.querySelectorAll('#easyShortcuts [data-shortcut]').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.shortcut === active);
-  });
-}
-function applyShortcut(type, { silent } = {}) {
-  if (!modalProduct && !silent) return;
-  if (type === 'sizes') {
-    selectSize(SURTIDO_SIZE);
-    if ($('cartColor').value === SURTIDO_COLOR) {
-      const first = $('cartColorChips').querySelector('.choice-chip');
-      if (first) selectColor(first.dataset.color, first.dataset.name);
-    }
-  } else if (type === 'colors') {
-    selectColor(SURTIDO_COLOR, SURTIDO_COLOR_NAME);
-    if ($('cartSize').value === SURTIDO_SIZE) {
-      const first = $('cartSizeChips').querySelector('.choice-chip');
-      if (first) selectSize(first.dataset.size);
-    }
-  } else if (type === 'both') {
-    selectSize(SURTIDO_SIZE);
-    selectColor(SURTIDO_COLOR, SURTIDO_COLOR_NAME);
-  } else if (!type) {
-    syncShortcutButtons();
-  }
-  if (!silent && type) {
-    const labels = { sizes: 'Talles surtidos', colors: 'Colores surtido', both: 'Todo surtido' };
-    showCartMsg(`${labels[type]}. Elegí cantidad y agregá.`);
-  }
-}
-function onShortcutClick(e) {
-  const btn = e.target.closest('[data-shortcut]');
-  if (!btn) return;
-  const next = currentShortcut() === btn.dataset.shortcut ? '' : btn.dataset.shortcut;
-  if (!next) {
-    const firstSize = $('cartSizeChips').querySelector('.choice-chip');
-    const firstColor = $('cartColorChips').querySelector('.choice-chip');
-    selectSize(firstSize?.dataset.size || '');
-    selectColor(firstColor?.dataset.color || '', firstColor?.dataset.name || '');
-    return;
-  }
-  applyShortcut(next);
 }
 function onChipClick(e, kind) {
   const btn = e.target.closest('.choice-chip');
   if (!btn) return;
-  if (kind === 'size') {
-    selectSize(btn.dataset.size);
-  } else {
-    selectColor(btn.dataset.color, btn.dataset.name);
-  }
+  if (kind === 'size') selectSize(btn.dataset.size);
 }
 
 function openModal(id, shortcut = '') {
@@ -483,7 +408,7 @@ function onAddToCart(e) {
   const colorName = $('cartColor').dataset.name || '';
   const qty = Math.max(1, parseInt($('cartQty').value, 10) || 1);
   if (!size || !colorCode) {
-    showCartMsg('Elegí talle y color, o un atajo de surtido.', false);
+    showCartMsg('Elegí un talle para continuar.', false);
     return;
   }
   const incoming = {
