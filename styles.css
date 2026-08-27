@@ -625,6 +625,25 @@ html[data-text="xl"] .search-box input { font-size: 18px; padding: 16px; }
   border-bottom: 2px solid transparent;
 }
 .admin-tabs .admin-tab-link:hover { border-bottom-color: var(--black); }
+.admin-scope-blurb {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--soft);
+  font-size: 13px;
+  line-height: 1.45;
+}
+body.admin-brasil-scope .admin-scope-blurb {
+  background: #eef5f9;
+  border-color: #c5d8e4;
+}
+body.admin-brasil-scope .col-local-only { display: none; }
+.admin-section-title {
+  margin: 22px 0 4px;
+  font-size: 16px;
+}
+.admin-section-copy { margin: 0 0 10px; font-size: 13px; }
 body.brasil-mode .topbar { background: #0b3d5c; }
 body.brasil-mode .topbar span:nth-child(2) { font-weight: 800; }
 .toolbar {

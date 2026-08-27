@@ -38,8 +38,19 @@ const PRODUCTS = loadProducts();
 const PRODUCT_BY_ID = new Map(PRODUCTS.map(p => [p.id, p]));
 const LOCAL_CATALOGS = new Set(['Boxers y Slips 2026', 'Lencería 2026', 'Medias 2026']);
 
+function productOrigin(p) {
+  const pdf = String(p?.pdf || '').replace(/\\/g, '/');
+  if (pdf.includes('nuevos-catalogos')) return 'local';
+  if (LOCAL_CATALOGS.has(p?.catalog)) return 'local';
+  return 'brasil';
+}
+
+function isLocalProduct(p) {
+  return productOrigin(p) === 'local';
+}
+
 function defaultPublishedIds() {
-  return PRODUCTS.filter(p => LOCAL_CATALOGS.has(p.catalog)).map(p => p.id);
+  return PRODUCTS.filter(isLocalProduct).map(p => p.id);
 }
 
 function hashPassword(password) {
@@ -414,6 +425,7 @@ function productAdminView(p) {
     hasCustomName: Boolean(meta.name),
     category: p.category,
     catalog: p.catalog,
+    origin: productOrigin(p),
     pdf: p.pdf || null,
     page: p.page || null,
     image: resolvedImage(p),
@@ -836,7 +848,7 @@ app.get('/api/catalog', requireAuth, (req, res) => {
   const list = getListById(req.user.priceListId);
   const prices = list && list.prices ? list.prices : {};
   const items = PRODUCTS
-    .filter(p => published.has(p.id))
+    .filter(p => isLocalProduct(p) && published.has(p.id))
     .map(p => catalogProduct(p, prices[p.id]));
   res.json({
     products: items,
@@ -932,7 +944,10 @@ app.get('/api/admin/catalogs', requireAdmin, (req, res) => {
 app.patch('/api/admin/products/visibility', requireAdmin, async (req, res) => {
   const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : [];
   const published = Boolean(req.body?.published);
-  const valid = new Set(ids.filter(id => PRODUCT_BY_ID.has(id)));
+  const valid = new Set(ids.filter(id => {
+    const product = PRODUCT_BY_ID.get(id);
+    return product && isLocalProduct(product);
+  }));
   const current = new Set(db.publishedIds);
   if (published) valid.forEach(id => current.add(id));
   else valid.forEach(id => current.delete(id));

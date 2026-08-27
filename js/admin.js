@@ -1,6 +1,7 @@
 const { escapeHtml, translateText, formatArs, formatFob, parseArs, api, logout, normalizeText, catalogLabel, PRODUCT_BADGES, badgeLabel } = window.LupoCommon;
 
 const $ = id => document.getElementById(id);
+const PRODUCT_TAB_SCOPES = { 'products-local': 'local', 'products-brasil': 'brasil' };
 let products = [];
 let catalogs = [];
 let lists = [];
@@ -9,6 +10,16 @@ let currentPrices = {};
 let dirtyPrices = {};
 let users = [];
 let editingId = '';
+let productScope = 'local';
+let activeTab = 'products-local';
+
+function productOrigin(p) {
+  return p?.origin === 'local' ? 'local' : 'brasil';
+}
+
+function productsInScope(scope = productScope) {
+  return products.filter(p => productOrigin(p) === scope);
+}
 
 function showFlash(text, err = false) {
   const el = $('flash');
@@ -18,23 +29,55 @@ function showFlash(text, err = false) {
   if (text) setTimeout(() => { if (el.textContent === text) el.hidden = true; }, 2800);
 }
 
+function panelIdForTab(tab) {
+  if (PRODUCT_TAB_SCOPES[tab]) return 'products';
+  return tab;
+}
+
+function updateProductScopeUI() {
+  const local = productScope === 'local';
+  const blurb = $('productScopeBlurb');
+  if (blurb) {
+    blurb.textContent = local
+      ? 'Productos que importás y vendés a tus mayoristas. Publicar u ocultar define lo que ven tus clientes.'
+      : 'Línea completa de Lupo Brasil. No se publica al catálogo de clientes: se usa para pedir a fábrica en FOB.';
+  }
+  document.querySelectorAll('[data-local-only]').forEach(el => { el.hidden = !local; });
+  document.querySelectorAll('[data-brasil-only]').forEach(el => { el.hidden = local; });
+}
+
 function switchTab(tab) {
+  activeTab = tab;
+  document.body.classList.toggle('admin-brasil-scope', tab === 'products-brasil');
+  const scope = PRODUCT_TAB_SCOPES[tab];
+  if (scope) {
+    productScope = scope;
+    if ($('productCatalogFilter')) $('productCatalogFilter').value = '';
+    if ($('selectAllProducts')) $('selectAllProducts').checked = false;
+    updateProductScopeUI();
+    fillCatalogFilters();
+    renderProducts();
+  }
+  const panelId = panelIdForTab(tab);
   document.querySelectorAll('.admin-tabs [data-tab]').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
-  document.querySelectorAll('.panel').forEach(panel => panel.classList.toggle('active', panel.id === `panel-${tab}`));
+  document.querySelectorAll('.panel').forEach(panel => panel.classList.toggle('active', panel.id === `panel-${panelId}`));
+}
+
+function catalogOptionsHtml(list) {
+  const catalogNames = [...new Set(list.map(p => p.catalog))].sort((a, b) => catalogLabel(a).localeCompare(catalogLabel(b), 'es'));
+  return `<option value="">Todos los catálogos</option>` + catalogNames.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(catalogLabel(c))}</option>`).join('');
 }
 
 function fillCatalogFilters() {
-  const catalogNames = [...new Set(products.map(p => p.catalog))].sort((a, b) => catalogLabel(a).localeCompare(catalogLabel(b), 'es'));
-  const html = `<option value="">Todos los catálogos</option>` + catalogNames.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(catalogLabel(c))}</option>`).join('');
-  if ($('productCatalogFilter')) $('productCatalogFilter').innerHTML = html;
-  if ($('priceCatalogFilter')) $('priceCatalogFilter').innerHTML = html;
+  if ($('productCatalogFilter')) $('productCatalogFilter').innerHTML = catalogOptionsHtml(productsInScope());
+  if ($('priceCatalogFilter')) $('priceCatalogFilter').innerHTML = catalogOptionsHtml(productsInScope('local'));
 }
 
 function filteredProducts() {
   const q = normalizeText($('productSearch').value);
   const catalog = $('productCatalogFilter')?.value || '';
   const fob = $('productFobFilter')?.value || '';
-  return products.filter(p => {
+  return productsInScope().filter(p => {
     if (catalog && p.catalog !== catalog) return false;
     if (fob === 'with' && !Number.isFinite(p.fobUsd)) return false;
     if (fob === 'without' && Number.isFinite(p.fobUsd)) return false;
@@ -74,50 +117,57 @@ function formatBytes(n) {
 
 function renderProducts() {
   const rows = filteredProducts();
-  const published = products.filter(p => p.published).length;
-  const withFob = products.filter(p => Number.isFinite(p.fobUsd)).length;
-  $('productStats').textContent = `${published} publicados · ${rows.length} en vista · ${products.length} totales · ${withFob} con FOB`;
+  const scoped = productsInScope();
+  const published = scoped.filter(p => p.published).length;
+  const withFob = scoped.filter(p => Number.isFinite(p.fobUsd)).length;
+  const local = productScope === 'local';
+  $('productStats').textContent = local
+    ? `${published} publicados · ${rows.length} en vista · ${scoped.length} en Argentina · ${withFob} con FOB`
+    : `${rows.length} en vista · ${scoped.length} en Brasil · ${withFob} con FOB`;
   $('productRows').innerHTML = rows.map(p => {
     const href = pdfHref(p);
     const orderVal = Number.isFinite(p.sortOrder) ? p.sortOrder : '';
     return `
     <tr data-product="${escapeHtml(p.id)}">
-      <td><input type="checkbox" data-id="${escapeHtml(p.id)}" ${p.published ? 'checked' : ''}></td>
+      <td class="col-local-only"><input type="checkbox" data-id="${escapeHtml(p.id)}" ${p.published ? 'checked' : ''}></td>
       <td><button class="thumb-edit" type="button" data-edit="${escapeHtml(p.id)}" title="Editar foto"><img class="thumb-mini" src="${escapeHtml(adminImage(p))}" alt=""></button></td>
-      <td><input class="sort-order-input" type="number" min="0" step="1" inputmode="numeric" data-sort="${escapeHtml(p.id)}" value="${escapeHtml(String(orderVal))}" placeholder="—" title="Menor número = aparece antes"></td>
+      <td class="col-local-only"><input class="sort-order-input" type="number" min="0" step="1" inputmode="numeric" data-sort="${escapeHtml(p.id)}" value="${escapeHtml(String(orderVal))}" placeholder="—" title="Menor número = aparece antes"></td>
       <td><b>${escapeHtml(p.code)}</b></td>
       <td>${escapeHtml(translateText(p.name))}</td>
       <td>${escapeHtml(catalogLabel(p.catalog))}</td>
       <td>${escapeHtml(formatFob(p.fobUsd))}</td>
       <td>${href ? `<a class="btn btn-ghost" href="${escapeHtml(href)}" target="_blank" rel="noopener">PDF</a>` : '—'}</td>
-      <td>
+      <td class="col-local-only">
         <select data-badge="${escapeHtml(p.id)}">${badgeOptions(p.badge)}</select>
         ${p.badge ? `<div class="mini-tag ${PRODUCT_BADGES[p.badge]?.className || ''}">${escapeHtml(badgeLabel(p.badge, p.badgeText))}</div>` : ''}
       </td>
-      <td><span class="status-pill ${p.published ? 'on' : 'off'}">${p.published ? 'Visible' : 'Oculto'}</span></td>
+      <td class="col-local-only"><span class="status-pill ${p.published ? 'on' : 'off'}">${p.published ? 'Visible' : 'Oculto'}</span></td>
       <td><button class="btn btn-ghost" type="button" data-edit="${escapeHtml(p.id)}">Editar</button></td>
     </tr>`;
   }).join('');
 }
 
+function catalogRowHtml(c) {
+  const href = c.pdf ? `/${String(c.pdf).replace(/^\//, '')}` : '';
+  return `<tr>
+    <td><b>${escapeHtml(catalogLabel(c.name))}</b><div class="muted" style="font-size:12px;">${escapeHtml(c.name)}</div></td>
+    <td>${c.productCount || 0}</td>
+    <td>${c.fobCount || 0}</td>
+    <td>${escapeHtml(formatBytes(c.size))}</td>
+    <td>${c.exists && href ? `<a class="btn btn-black" href="${escapeHtml(href)}" target="_blank" rel="noopener">Abrir PDF</a>` : '<span class="muted">No encontrado</span>'}</td>
+  </tr>`;
+}
+
 function renderCatalogs() {
-  if (!$('catalogRows')) return;
-  const brasil = catalogs.filter(c => c.origin === 'brasil');
+  if (!$('catalogRowsLocal') || !$('catalogRowsBrasil')) return;
+  const local = catalogs.filter(c => c.origin === 'local');
+  const brasil = catalogs.filter(c => c.origin !== 'local');
+  const localCount = local.reduce((n, c) => n + (c.productCount || 0), 0);
+  const brasilCount = brasil.reduce((n, c) => n + (c.productCount || 0), 0);
   const withFob = brasil.reduce((n, c) => n + (c.fobCount || 0), 0);
-  const articles = brasil.reduce((n, c) => n + (c.productCount || 0), 0);
-  $('catalogStats').textContent = `${catalogs.length} catálogos · ${articles} artículos Brasil · ${withFob} con FOB`;
-  $('catalogRows').innerHTML = catalogs.map(c => {
-    const href = c.pdf ? `/${String(c.pdf).replace(/^\//, '')}` : '';
-    const origin = c.origin === 'local' ? 'Local' : 'Brasil';
-    return `<tr>
-      <td><b>${escapeHtml(catalogLabel(c.name))}</b><div class="muted" style="font-size:12px;">${escapeHtml(c.name)}</div></td>
-      <td>${escapeHtml(origin)}</td>
-      <td>${c.productCount || 0}</td>
-      <td>${c.fobCount || 0}</td>
-      <td>${escapeHtml(formatBytes(c.size))}</td>
-      <td>${c.exists && href ? `<a class="btn btn-black" href="${escapeHtml(href)}" target="_blank" rel="noopener">Abrir PDF</a>` : '<span class="muted">No encontrado</span>'}</td>
-    </tr>`;
-  }).join('');
+  $('catalogStats').textContent = `${local.length} catálogos Argentina (${localCount} art.) · ${brasil.length} Brasil (${brasilCount} art., ${withFob} con FOB)`;
+  $('catalogRowsLocal').innerHTML = local.map(catalogRowHtml).join('') || '<tr><td colspan="5" class="muted">No hay catálogos de Argentina.</td></tr>';
+  $('catalogRowsBrasil').innerHTML = brasil.map(catalogRowHtml).join('') || '<tr><td colspan="5" class="muted">No hay catálogos de Brasil.</td></tr>';
 }
 
 function upsertProduct(updated) {
@@ -213,7 +263,7 @@ function fillListSelects() {
 function filteredPriceProducts() {
   const q = normalizeText($('priceSearch').value);
   const catalog = $('priceCatalogFilter')?.value || '';
-  return products.filter(p => {
+  return productsInScope('local').filter(p => {
     if (catalog && p.catalog !== catalog) return false;
     const blob = normalizeText([p.code, translateText(p.name), catalogLabel(p.catalog), p.catalog].join(' '));
     return !q || blob.includes(q);
@@ -298,6 +348,7 @@ async function init() {
   $('adminUserLabel').textContent = `${me.user.name || me.user.username}`;
   products = (await api('/api/admin/products')).products;
   catalogs = (await api('/api/admin/catalogs')).catalogs || [];
+  updateProductScopeUI();
   fillCatalogFilters();
   await refreshLists();
   await loadList(currentListId);
@@ -354,7 +405,7 @@ async function init() {
     const ids = filteredProducts().map(p => p.id);
     if (!ids.length) return showFlash('No hay productos filtrados.', true);
     try {
-      await api('/api/admin/products/badges', { method: 'PATCH', body: { badge: $('bulkBadge').value, badgeText: '' } });
+      await api('/api/admin/products/badges', { method: 'PATCH', body: { ids, badge: $('bulkBadge').value, badgeText: '' } });
       const badge = $('bulkBadge').value;
       products.forEach(p => {
         if (ids.includes(p.id)) {

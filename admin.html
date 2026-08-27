@@ -7,12 +7,12 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=15">
+  <link rel="stylesheet" href="/styles.css?v=16">
 </head>
 <body>
   <div class="topbar">
     <span>Panel administrador</span>
-    <span>Productos · Catálogos · Listas · Usuarios</span>
+    <span>Argentina · Brasil · Listas · Usuarios</span>
   </div>
   <header class="site-header admin-header">
     <div class="header-row">
@@ -32,15 +32,17 @@
   <main class="wrap">
     <p id="flash" class="flash" hidden></p>
     <div class="admin-tabs">
-      <button type="button" data-tab="products" class="active">Productos</button>
-      <button type="button" data-tab="catalogs">Catálogos</button>
+      <button type="button" data-tab="products-local" class="active">Argentina</button>
+      <button type="button" data-tab="products-brasil">Brasil</button>
+      <button type="button" data-tab="catalogs">Catálogos PDF</button>
       <button type="button" data-tab="lists">Listas de precios</button>
       <button type="button" data-tab="users">Usuarios</button>
       <button type="button" data-tab="settings">WhatsApp</button>
-      <a class="admin-tab-link" href="/brasil">Pedidos Brasil</a>
+      <a class="admin-tab-link" href="/brasil">Armar pedido Brasil</a>
     </div>
 
     <section id="panel-products" class="panel active">
+      <p id="productScopeBlurb" class="admin-scope-blurb">Productos que importás y vendés a tus mayoristas. Publicar u ocultar define lo que ven tus clientes.</p>
       <div class="toolbar">
         <input id="productSearch" placeholder="Buscar código, nombre o catálogo">
         <select id="productCatalogFilter">
@@ -51,31 +53,32 @@
           <option value="with">Con FOB</option>
           <option value="without">Sin FOB</option>
         </select>
-        <button id="publishFiltered" class="btn btn-black" type="button">Publicar filtrados</button>
-        <button id="hideFiltered" class="btn btn-ghost" type="button">Ocultar filtrados</button>
-        <select id="bulkBadge">
+        <button id="publishFiltered" class="btn btn-black" type="button" data-local-only>Publicar filtrados</button>
+        <button id="hideFiltered" class="btn btn-ghost" type="button" data-local-only>Ocultar filtrados</button>
+        <select id="bulkBadge" data-local-only>
           <option value="">Sin etiqueta</option>
           <option value="promo">Promoción</option>
           <option value="last">Últimas unidades</option>
           <option value="sale">Liquidación</option>
         </select>
-        <button id="applyBulkBadge" class="btn btn-ghost" type="button">Aplicar etiqueta a filtrados</button>
+        <button id="applyBulkBadge" class="btn btn-ghost" type="button" data-local-only>Aplicar etiqueta a filtrados</button>
+        <a class="btn btn-black" href="/brasil" data-brasil-only hidden>Ir a Pedidos Brasil</a>
         <span class="muted" id="productStats"></span>
       </div>
       <div class="admin-table-wrap">
         <table class="admin-table">
           <thead>
             <tr>
-              <th><input id="selectAllProducts" type="checkbox"></th>
+              <th class="col-local-only"><input id="selectAllProducts" type="checkbox"></th>
               <th></th>
-              <th title="Menor número = aparece antes">Orden</th>
+              <th class="col-local-only" title="Menor número = aparece antes">Orden</th>
               <th>Código</th>
               <th>Producto</th>
               <th>Catálogo</th>
               <th>FOB</th>
               <th>PDF</th>
-              <th>Etiqueta</th>
-              <th>Visible</th>
+              <th class="col-local-only">Etiqueta</th>
+              <th class="col-local-only">Visible</th>
               <th></th>
             </tr>
           </thead>
@@ -85,28 +88,46 @@
     </section>
 
     <section id="panel-catalogs" class="panel">
-      <p class="muted" style="margin:0 0 14px;">PDFs del catálogo completo de Brasil y los catálogos locales. Los artículos Brasil traen precio FOB cuando está cargado.</p>
+      <p class="muted" style="margin:0 0 18px;">Los PDF de Argentina son el surtido que ya traés. Los de Brasil son la línea completa para armar pedidos FOB.</p>
       <div class="toolbar">
         <span class="muted" id="catalogStats"></span>
       </div>
+      <h2 class="admin-section-title">En Argentina</h2>
+      <p class="muted admin-section-copy">Boxers, lencería y medias que vendés a mayoristas.</p>
       <div class="admin-table-wrap">
         <table class="admin-table">
           <thead>
             <tr>
               <th>Catálogo</th>
-              <th>Origen</th>
               <th>Artículos</th>
               <th>Con FOB</th>
               <th>Tamaño</th>
               <th></th>
             </tr>
           </thead>
-          <tbody id="catalogRows"></tbody>
+          <tbody id="catalogRowsLocal"></tbody>
+        </table>
+      </div>
+      <h2 class="admin-section-title">Catálogo Brasil</h2>
+      <p class="muted admin-section-copy">Línea completa de Lupo. No se publica a tus clientes.</p>
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Catálogo</th>
+              <th>Artículos</th>
+              <th>Con FOB</th>
+              <th>Tamaño</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="catalogRowsBrasil"></tbody>
         </table>
       </div>
     </section>
 
     <section id="panel-lists" class="panel">
+      <p class="admin-scope-blurb">Los precios en pesos son solo para el surtido de Argentina. Los artículos de Brasil se piden en FOB desde Pedidos Brasil.</p>
       <form id="newListForm" class="list-form">
         <div class="field">
           <label for="newListName">Nueva lista</label>
@@ -253,6 +274,6 @@
   </div>
 
   <script src="/js/common.js?v=4"></script>
-  <script src="/js/admin.js?v=8"></script>
+  <script src="/js/admin.js?v=9"></script>
 </body>
 </html>
