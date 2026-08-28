@@ -179,14 +179,17 @@ def extract_catalog(key, catalog_name, category, globpat):
         render_page(page, page_img, zoom=1.35)
         w, h = page.rect.width, page.rect.height
         n = len(arts)
-        for idx, code in enumerate(arts):
-            clip = photo_clip(page, key, n, idx)
-            region_text = page.get_text("text", clip=fitz.Rect(
+        for idx in range(n):
+            region_rect = fitz.Rect(
                 (w / n) * idx if n > 1 else 0,
                 0,
                 (w / n) * (idx + 1) if n > 1 else w,
                 h,
-            ))
+            )
+            region_text = page.get_text("text", clip=region_rect)
+            col_codes = codes_in(region_text)
+            code = col_codes[-1] if col_codes else arts[idx]
+            clip = photo_clip(page, key, n, idx)
             name = title_from_clip(page, fitz.Rect(
                 (w / n) * idx if n > 1 else w * 0.48,
                 0,
@@ -229,7 +232,10 @@ def recrop_images():
             if not arts:
                 continue
             n = len(arts)
-            for idx, code in enumerate(arts):
+            for idx in range(n):
+                region_rect = fitz.Rect((page.rect.width / n) * idx, 0, (page.rect.width / n) * (idx + 1), page.rect.height)
+                col_codes = codes_in(page.get_text("text", clip=region_rect))
+                code = col_codes[-1] if col_codes else arts[idx]
                 img_rel = os.path.join(OUT_PRODUCTS, f"{key}-{slug(code)}-{i + 1}.jpg")
                 render_page(page, img_rel, clip=photo_clip(page, key, n, idx), zoom=2.0)
                 n_cat += 1
