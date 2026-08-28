@@ -362,18 +362,6 @@ function showImportMsg(text, ok = true) {
   msg.classList.toggle('ok', ok);
   msg.classList.toggle('err', !ok);
 }
-async function loadDanielaOrder() {
-  const res = await fetch('/orders/pedido-daniela-almeida.csv', { credentials: 'include' });
-  if (!res.ok) throw new Error('No se pudo cargar el pedido de Daniela.');
-  const text = await res.text();
-  const rows = parseOrderCsv(text);
-  const result = importOrderRows(rows, {
-    notes: 'Pedido Daniela Almeida',
-    replace: true
-  });
-  showImportMsg(`Pedido cargado: ${result.lines} líneas · ${result.units} u. · ${result.matched} con catálogo${result.unmatched ? ` · ${result.unmatched} sin match` : ''}.`);
-  openCart();
-}
 async function importOrderFromFile(file) {
   const text = await file.text();
   const rows = parseOrderCsv(text);
@@ -591,13 +579,6 @@ async function init() {
   $('cartNotes').addEventListener('input', () => {
     cartNotes = $('cartNotes').value.slice(0, 800);
     saveCart();
-  });
-  $('loadDanielaBtn')?.addEventListener('click', async () => {
-    try {
-      await loadDanielaOrder();
-    } catch (err) {
-      showImportMsg(err.message || 'No se pudo cargar el pedido.', false);
-    }
   });
   $('importOrderFile')?.addEventListener('change', async () => {
     const file = $('importOrderFile').files?.[0];
