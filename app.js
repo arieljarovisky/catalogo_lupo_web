@@ -83,7 +83,7 @@ function assetUrl(src) {
   if (!value) return '';
   if (/^(https?:|data:|blob:)/i.test(value)) return value;
   const path = value.startsWith('/') ? value : `/${value}`;
-  return path.includes('?') ? path : `${path}?v=4`;
+  return path.includes('?') ? path : `${path}?v=6`;
 }
 function colorPhoto(c) {
   return assetUrl(c && c.image);

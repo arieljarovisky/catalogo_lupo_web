@@ -40,6 +40,14 @@ def lines_in(page, clip):
     return out
 
 
+def labels_in_clip(page, clip):
+    return [
+        (text, bbox)
+        for text, bbox in lines_in(page, clip)
+        if clip.x0 <= (bbox[0] + bbox[2]) / 2 <= clip.x1
+    ]
+
+
 def match_color(color, labels, used):
     name = norm(color.get("name"))
     code = norm(color.get("code"))
@@ -70,7 +78,63 @@ def match_color(color, labels, used):
     return best_i if best >= 15 else None
 
 
-def crop_above(page, bbox, prev_bbox, pdf):
+def image_blocks(page):
+    return [
+        block["bbox"]
+        for block in page.get_text("dict").get("blocks", [])
+        if block.get("type") == 1
+    ]
+
+
+def swatch_rect_for_label(page, label_bbox, pdf=None, clip=None):
+    """Use the embedded swatch image above a color label (lencería PDF layout)."""
+    if "lencer" not in (pdf or "").lower():
+        return None
+    lx0, ly0, lx1, ly1 = label_bbox
+    lcx = (lx0 + lx1) / 2
+    best = None
+    best_score = -1
+    for bx0, by0, bx1, by1 in image_blocks(page):
+        bw, bh = bx1 - bx0, by1 - by0
+        if bw > 320 or bh > 160 or bw < 60 or bh < 40:
+            continue
+        if bx1 < lx0 - 30 or bx0 > lx1 + 30:
+            continue
+        if by0 > ly0 + 5 or by1 < ly0 - 30:
+            continue
+        bcx = (bx0 + bx1) / 2
+        score = 120 - abs(bcx - lcx) - abs(by1 - ly0) * 3 - max(0, bh - 130) * 2
+        if score > best_score:
+            best_score = score
+            best = (bx0, by0, bx1, by1)
+    if not best:
+        return None
+    bx0, by0, bx1, by1 = best
+    left = bx0 + 3
+    right = bx1 - 3
+    if clip is not None:
+        left = max(left, clip.x0 + 6)
+        right = min(right, clip.x1 - 6)
+    top = by0 + 3
+    bottom = min(by1 - 3, ly0 - 1)
+    block_h = by1 - by0
+    if block_h > 118:
+        top = max(top, by0 + block_h * 0.55)
+    if bottom - top < 48:
+        top = bottom - 48
+    if right - left < 36 or bottom - top < 36:
+        return None
+    return fitz.Rect(left, top, right, bottom)
+
+
+def crop_rect_for_color(page, bbox, prev_bbox, pdf, clip=None):
+    rect = swatch_rect_for_label(page, bbox, pdf, clip)
+    if rect is not None:
+        return rect
+    return crop_above(page, bbox, prev_bbox, pdf, clip)
+
+
+def crop_above(page, bbox, prev_bbox, pdf, clip=None):
     x0, y0, x1, y1 = bbox
     cx = (x0 + x1) / 2
     path = (pdf or "").lower()
@@ -78,27 +142,48 @@ def crop_above(page, bbox, prev_bbox, pdf):
         half = 38
         default_h = 92
     elif "lencer" in path:
-        half = 70
-        default_h = 150
+        half = 55
+        default_h = 88
+        max_h = 108
     else:
         half = 102
         default_h = 96
+        max_h = 170
+    if "lencer" not in path and "media" not in path:
+        max_h = 170
     gap = y0 - prev_bbox[3] if prev_bbox else default_h
-    height = max(56, min(170, gap - 4 if prev_bbox else default_h))
+    height = max(56, min(max_h if "lencer" in path else 170, gap - 4 if prev_bbox else default_h))
     top = max(page.rect.y0, y0 - height)
     bottom = max(top + 36, y0 - 1)
     left = max(page.rect.x0, cx - half)
     right = min(page.rect.x1, cx + half)
+    if clip is not None:
+        left = max(left, clip.x0 + 6)
+        right = min(right, clip.x1 - 6)
     return fitz.Rect(left, top, right, bottom)
+
+
+def column_index_for_code(page, code):
+    w, h = page.rect.width, page.rect.height
+    arts = codes_in(page.get_text("text"))
+    if len(arts) <= 1:
+        return 0
+    n = len(arts)
+    for idx in range(n):
+        region = page.get_text("text", clip=fitz.Rect((w / n) * idx, 0, (w / n) * (idx + 1), h))
+        col_codes = codes_in(region)
+        if col_codes and col_codes[-1] == code:
+            return idx
+    try:
+        return arts.index(code)
+    except ValueError:
+        return 0
 
 
 def article_clip(page, arts, code):
     if len(arts) <= 1:
         return page.rect
-    try:
-        idx = arts.index(code)
-    except ValueError:
-        return page.rect
+    idx = column_index_for_code(page, code)
     col = page.rect.width / len(arts)
     return fitz.Rect(page.rect.x0 + col * idx, page.rect.y0, page.rect.x0 + col * (idx + 1), page.rect.y1)
 
@@ -133,7 +218,7 @@ def main():
         page = docs[pdf][page_no - 1]
         arts = codes_in(page.get_text("text"))
         clip = article_clip(page, arts, p.get("code"))
-        labels = lines_in(page, clip)
+        labels = labels_in_clip(page, clip)
         ordered = sorted(enumerate(colors), key=lambda item: -len(norm(item[1].get("name"))))
         used = set()
         matched = {}
@@ -148,7 +233,7 @@ def main():
         for _y, _x, idx, bbox in placed:
             col_key = round(((bbox[0] + bbox[2]) / 2) / 40)
             prev = prev_by_col.get(col_key)
-            rect = crop_above(page, bbox, prev, pdf)
+            rect = crop_rect_for_color(page, bbox, prev, pdf, clip)
             prev_by_col[col_key] = bbox
             rel = f"{OUT}/{p['id']}-{idx + 1:02d}.jpg".replace("\\", "/")
             pix = page.get_pixmap(matrix=fitz.Matrix(2.2, 2.2), clip=rect, alpha=False)
