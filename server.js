@@ -608,6 +608,18 @@ function formatMoneyPlain(value) {
   return value.toFixed(2);
 }
 
+const IVA_RATE = 0.21;
+
+function orderTotalsArs(items) {
+  const subtotal = items.reduce((sum, item) => {
+    if (!Number.isFinite(item.priceArs)) return sum;
+    return sum + item.priceArs * Number(item.qty || 0);
+  }, 0);
+  const iva = Math.round(subtotal * IVA_RATE * 100) / 100;
+  const total = Math.round((subtotal + iva) * 100) / 100;
+  return { subtotal, iva, total };
+}
+
 function buildOrderExcelXml({ clientName, username, items, notes, currency = 'ARS' }) {
   const isFob = currency === 'USD';
   const priceKey = isFob ? 'fobUsd' : 'priceArs';
@@ -638,10 +650,19 @@ function buildOrderExcelXml({ clientName, username, items, notes, currency = 'AR
     ['Usuario', username],
     ['Tipo', isFob ? 'Pedido Brasil (FOB)' : 'Pedido mayorista'],
     ['Fecha', new Date().toLocaleString('es-AR')],
-    ['Unidades', String(qtyTotal)],
-    [totalLabel, formatMoneyPlain(moneyTotal)],
-    ['Notas', notes || '']
+    ['Unidades', String(qtyTotal)]
   ];
+  if (isFob) {
+    info.push([totalLabel, formatMoneyPlain(moneyTotal)]);
+  } else {
+    const { subtotal, iva, total } = orderTotalsArs(items);
+    info.push(
+      ['Subtotal ARS', formatMoneyPlain(subtotal)],
+      ['IVA 21%', formatMoneyPlain(iva)],
+      ['Total con IVA', formatMoneyPlain(total)]
+    );
+  }
+  info.push(['Notas', notes || '']);
   const allRows = [...info, [], header, ...body];
   const numberCols = new Set([4, 5, 6]);
   const xmlRows = allRows.map((row, rowIndex) => {
@@ -912,14 +933,16 @@ app.post('/api/orders', requireAuth, async (req, res) => {
   await persistOrder(token, filename, xml);
   const excelUrl = `${publicBaseUrl(req)}/pedido/${token}`;
   const qtyTotal = items.reduce((sum, item) => sum + item.qty, 0);
-  const moneyTotal = items.reduce((sum, item) => sum + (Number.isFinite(item.priceArs) ? item.priceArs * item.qty : 0), 0);
+  const { subtotal, iva, total } = orderTotalsArs(items);
   const phone = normalizeWhatsapp(db.settings?.whatsappNumber);
   const message = [
     'Pedido Lupo',
     `Cliente: ${req.user.name || req.user.username}`,
     `Usuario: ${req.user.username}`,
     `${items.length} línea${items.length === 1 ? '' : 's'} · ${qtyTotal} unidad${qtyTotal === 1 ? '' : 'es'}`,
-    moneyTotal ? `Total: ${moneyTotal.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}` : '',
+    subtotal ? `Subtotal: ${subtotal.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}` : '',
+    subtotal ? `IVA 21%: ${iva.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}` : '',
+    subtotal ? `Total con IVA: ${total.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' })}` : '',
     notes ? `Notas: ${notes}` : '',
     '',
     'Excel del pedido:',

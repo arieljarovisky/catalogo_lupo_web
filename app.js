@@ -727,11 +727,7 @@ function fillCartForm(p) {
       const dup = nameCounts[normalizeText(base)] > 1;
       const label = escapeHtml(dup ? `${base} · ${c.code}` : base);
       const src = colorPhoto(c) || '';
-      const swatch = approximateColor(c.name || c.code);
-      const visual = src
-        ? `<img src="${escapeHtml(src)}" alt="">`
-        : `<span class="color-dot" style="background:${escapeHtml(swatch)}"></span>`;
-      return `<button type="button" class="choice-chip color-photo-chip" data-color="${escapeHtml(c.code)}" data-name="${escapeHtml(translateText(c.name))}" data-image="${escapeHtml(src)}">${visual}<span>${label}</span></button>`;
+      return `<button type="button" class="choice-chip" data-color="${escapeHtml(c.code)}" data-name="${escapeHtml(translateText(c.name))}" data-image="${escapeHtml(src)}">${label}</button>`;
     }),
     `<button type="button" class="choice-chip" data-color="${escapeHtml(SURTIDO_COLOR)}" data-name="Surtido" data-image="">Surtido</button>`
   ].join('');
@@ -741,31 +737,6 @@ function fillCartForm(p) {
   else selectSize('');
   if (colors.length === 1) selectColor(colors[0].code, translateText(colors[0].name));
   else selectColor('', '');
-}
-
-function approximateColor(name) {
-  const n = normalizeText(name);
-  const table = [
-    ['preto', '#111'], ['preta', '#111'], ['negro', '#111'], ['black', '#111'],
-    ['branco', '#f5f5f5'], ['branca', '#f5f5f5'], ['white', '#f5f5f5'],
-    ['cinza', '#8a8a8a'], ['gris', '#8a8a8a'], ['grafite', '#4a4a4a'],
-    ['marinho', '#0b1f4a'], ['navy', '#0b1f4a'],
-    ['petroleo', '#1c3a40'], ['azul petroleo', '#1c3a40'], ['azul caribe', '#1aa6b8'],
-    ['azul claro', '#7eb6ff'], ['celeste', '#7eb6ff'], ['anil', '#3b5bdb'], ['azul', '#1f5eff'],
-    ['verde lim', '#9acd32'], ['lima citrico', '#c6e000'], ['lima', '#9acd32'],
-    ['cacto', '#2f6b3c'], ['verde', '#2f6b3c'],
-    ['fucsia glam', '#c4007a'], ['fucsia', '#d1006c'], ['fucia', '#d1006c'],
-    ['magenta', '#c0007a'], ['rosa', '#e86aa2'], ['carmin', '#9b1b30'], ['carmim', '#9b1b30'],
-    ['coral', '#ff6f61'], ['vermelho', '#c62828'], ['rojo', '#c62828'],
-    ['laranja', '#ff7a00'], ['orange', '#ff7a00'], ['mostarda', '#c4a000'],
-    ['violeta', '#6a1b9a'], ['purple', '#6a1b9a'], ['lavanda', '#b39ddb'],
-    ['bege', '#d7c4a3'], ['chocolate', '#5d3a1a'], ['marrom', '#6b3e26'], ['noz', '#8b5a2b'],
-    ['camarao', '#e39a7b'], ['amarelo', '#f2c200'], ['oliva', '#6b7c3a']
-  ];
-  for (const [key, hex] of table) {
-    if (n.includes(key)) return hex;
-  }
-  return '#d0d0d0';
 }
 
 function selectSize(value) {
