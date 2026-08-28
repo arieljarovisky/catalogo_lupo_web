@@ -1,9 +1,10 @@
-const { escapeHtml, translateText, formatArs, formatFob, parseArs, api, logout, normalizeText, catalogLabel, PRODUCT_BADGES, badgeLabel } = window.LupoCommon;
+const { escapeHtml, translateText, formatArs, formatFob, parseArs, api, logout, normalizeText, catalogLabel, setCustomLabels, badgeLabel } = window.LupoCommon;
 
 const $ = id => document.getElementById(id);
 const PRODUCT_TAB_SCOPES = { 'products-local': 'local', 'products-brasil': 'brasil' };
 let products = [];
 let catalogs = [];
+let labels = [];
 let lists = [];
 let currentListId = '';
 let currentPrices = {};
@@ -58,13 +59,19 @@ function switchTab(tab) {
     fillCatalogFilters();
     renderProducts();
   }
+  if (tab === 'labels') renderLabels();
   const panelId = panelIdForTab(tab);
   document.querySelectorAll('.admin-tabs [data-tab]').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
   document.querySelectorAll('.panel').forEach(panel => panel.classList.toggle('active', panel.id === `panel-${panelId}`));
 }
 
 function catalogOptionsHtml(list) {
-  const catalogNames = [...new Set(list.map(p => p.catalog))].sort((a, b) => catalogLabel(a).localeCompare(catalogLabel(b), 'es'));
+  const catalogNames = [...new Set(list.map(p => p.catalog))].sort((a, b) => {
+    const al = LINGERIE_CATALOGS.has(a) ? 0 : 1;
+    const bl = LINGERIE_CATALOGS.has(b) ? 0 : 1;
+    if (al !== bl) return al - bl;
+    return catalogLabel(a).localeCompare(catalogLabel(b), 'es');
+  });
   return `<option value="">Todos los catálogos</option>` + catalogNames.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(catalogLabel(c))}</option>`).join('');
 }
 
@@ -72,6 +79,8 @@ function fillCatalogFilters() {
   if ($('productCatalogFilter')) $('productCatalogFilter').innerHTML = catalogOptionsHtml(productsInScope());
   if ($('priceCatalogFilter')) $('priceCatalogFilter').innerHTML = catalogOptionsHtml(productsInScope('local'));
 }
+
+const LINGERIE_CATALOGS = new Set(['Lencería 2026', 'Lupo Lingerie PV 2026']);
 
 function filteredProducts() {
   const q = normalizeText($('productSearch').value);
@@ -84,6 +93,9 @@ function filteredProducts() {
     const blob = normalizeText([p.code, translateText(p.name), catalogLabel(p.catalog), p.catalog, p.category].join(' '));
     return !q || blob.includes(q);
   }).sort((a, b) => {
+    const al = LINGERIE_CATALOGS.has(a.catalog) ? 0 : 1;
+    const bl = LINGERIE_CATALOGS.has(b.catalog) ? 0 : 1;
+    if (al !== bl) return al - bl;
     const ao = Number.isFinite(a.sortOrder) ? a.sortOrder : Number.POSITIVE_INFINITY;
     const bo = Number.isFinite(b.sortOrder) ? b.sortOrder : Number.POSITIVE_INFINITY;
     if (ao !== bo) return ao - bo;
@@ -92,9 +104,43 @@ function filteredProducts() {
 }
 
 function badgeOptions(selected) {
-  return `<option value="">Sin etiqueta</option>` + Object.values(PRODUCT_BADGES).map(b =>
-    `<option value="${escapeHtml(b.id)}" ${selected === b.id ? 'selected' : ''}>${escapeHtml(b.label)}</option>`
+  return `<option value="">Sin etiqueta</option>` + labels.map(b =>
+    `<option value="${escapeHtml(b.id)}" ${selected === b.id ? 'selected' : ''}>${escapeHtml(b.name || b.label || b.id)}</option>`
   ).join('');
+}
+
+function fillBadgeSelects() {
+  const html = badgeOptions('');
+  if ($('bulkBadge')) {
+    const current = $('bulkBadge').value;
+    $('bulkBadge').innerHTML = html;
+    if (current && labels.some(l => l.id === current)) $('bulkBadge').value = current;
+  }
+  if ($('editorBadge')) {
+    const current = $('editorBadge').value;
+    $('editorBadge').innerHTML = html;
+    if (current && labels.some(l => l.id === current)) $('editorBadge').value = current;
+  }
+}
+
+function labelPreviewStyle(label) {
+  return label?.color ? `background:${label.color}` : '';
+}
+
+function renderLabels() {
+  if (!$('labelRows')) return;
+  $('labelRows').innerHTML = labels.map(l => `
+    <tr data-label="${escapeHtml(l.id)}">
+      <td><span class="mini-tag" style="${escapeHtml(labelPreviewStyle(l))}">${escapeHtml(l.name)}</span></td>
+      <td><input type="text" data-label-name value="${escapeHtml(l.name)}" maxlength="40"></td>
+      <td><input type="color" data-label-color value="${escapeHtml(l.color || '#111111')}"></td>
+      <td><label class="label-check"><input type="checkbox" data-label-promo ${l.promoTab ? 'checked' : ''}> Promociones</label></td>
+      <td>
+        <button class="btn btn-ghost" type="button" data-save-label="${escapeHtml(l.id)}">Guardar</button>
+        <button class="btn btn-ghost" type="button" data-delete-label="${escapeHtml(l.id)}">Eliminar</button>
+      </td>
+    </tr>
+  `).join('') || '<tr><td colspan="5" class="muted">Todavía no hay etiquetas.</td></tr>';
 }
 
 function adminImage(p) {
@@ -139,7 +185,7 @@ function renderProducts() {
       <td>${href ? `<a class="btn btn-ghost" href="${escapeHtml(href)}" target="_blank" rel="noopener">PDF</a>` : '—'}</td>
       <td class="col-local-only">
         <select data-badge="${escapeHtml(p.id)}">${badgeOptions(p.badge)}</select>
-        ${p.badge ? `<div class="mini-tag ${PRODUCT_BADGES[p.badge]?.className || ''}">${escapeHtml(badgeLabel(p.badge, p.badgeText))}</div>` : ''}
+        ${p.badge ? `<div class="mini-tag" style="${escapeHtml(labelPreviewStyle(labels.find(l => l.id === p.badge)))}">${escapeHtml(badgeLabel(p.badge, p.badgeText))}</div>` : ''}
       </td>
       <td class="col-local-only"><span class="status-pill ${p.published ? 'on' : 'off'}">${p.published ? 'Visible' : 'Oculto'}</span></td>
       <td><button class="btn btn-ghost" type="button" data-edit="${escapeHtml(p.id)}">Editar</button></td>
@@ -181,7 +227,10 @@ function fillEditor(p) {
   $('editorCode').textContent = p.code;
   $('editorImage').src = adminImage(p);
   $('editorName').value = p.name || '';
-  $('editorBadge').value = p.badge || '';
+  if ($('editorBadge')) {
+    $('editorBadge').innerHTML = badgeOptions(p.badge || '');
+    $('editorBadge').value = p.badge || '';
+  }
   $('editorBadgeText').value = p.badgeText || '';
   if ($('editorSortOrder')) $('editorSortOrder').value = Number.isFinite(p.sortOrder) ? p.sortOrder : '';
   $('restoreImageBtn').disabled = !p.hasCustomImage;
@@ -225,6 +274,7 @@ function openEditor(id) {
   const p = products.find(x => x.id === id);
   if (!p) return;
   editingId = id;
+  fillBadgeSelects();
   fillEditor(p);
   $('productEditor').hidden = false;
   $('editorFile').value = '';
@@ -339,6 +389,14 @@ async function refreshUsers() {
   renderUsers();
 }
 
+async function refreshLabels() {
+  const data = await api('/api/admin/labels');
+  labels = data.labels || [];
+  setCustomLabels(labels.map(l => ({ id: l.id, name: l.name, color: l.color, promoTab: l.promoTab })));
+  fillBadgeSelects();
+  renderLabels();
+}
+
 async function init() {
   const me = await api('/api/me');
   if (me.user.role !== 'admin') {
@@ -346,6 +404,7 @@ async function init() {
     return;
   }
   $('adminUserLabel').textContent = `${me.user.name || me.user.username}`;
+  await refreshLabels();
   products = (await api('/api/admin/products')).products;
   catalogs = (await api('/api/admin/catalogs')).catalogs || [];
   updateProductScopeUI();
@@ -360,6 +419,57 @@ async function init() {
     btn.addEventListener('click', () => switchTab(btn.dataset.tab));
   });
   $('logoutBtn').addEventListener('click', logout);
+  $('newLabelForm')?.addEventListener('submit', async e => {
+    e.preventDefault();
+    try {
+      await api('/api/admin/labels', {
+        method: 'POST',
+        body: {
+          name: $('newLabelName').value.trim(),
+          color: $('newLabelColor').value,
+          promoTab: $('newLabelPromoTab').checked
+        }
+      });
+      $('newLabelName').value = '';
+      $('newLabelPromoTab').checked = true;
+      await refreshLabels();
+      renderProducts();
+      showFlash('Etiqueta creada.');
+    } catch (err) { showFlash(err.message, true); }
+  });
+  $('labelRows')?.addEventListener('click', async e => {
+    const saveBtn = e.target.closest('[data-save-label]');
+    const deleteBtn = e.target.closest('[data-delete-label]');
+    const row = e.target.closest('tr[data-label]');
+    if (!row) return;
+    const id = row.dataset.label;
+    if (saveBtn) {
+      try {
+        await api(`/api/admin/labels/${id}`, {
+          method: 'PATCH',
+          body: {
+            name: row.querySelector('[data-label-name]').value.trim(),
+            color: row.querySelector('[data-label-color]').value,
+            promoTab: row.querySelector('[data-label-promo]').checked
+          }
+        });
+        await refreshLabels();
+        renderProducts();
+        showFlash('Etiqueta actualizada.');
+      } catch (err) { showFlash(err.message, true); }
+      return;
+    }
+    if (deleteBtn) {
+      if (!confirm('¿Eliminar esta etiqueta? Se la quita de los productos que la tengan.')) return;
+      try {
+        await api(`/api/admin/labels/${id}`, { method: 'DELETE' });
+        await refreshLabels();
+        products = (await api('/api/admin/products')).products;
+        renderProducts();
+        showFlash('Etiqueta eliminada.');
+      } catch (err) { showFlash(err.message, true); }
+    }
+  });
   $('productSearch').addEventListener('input', renderProducts);
   $('productCatalogFilter').addEventListener('change', renderProducts);
   $('productFobFilter')?.addEventListener('change', renderProducts);

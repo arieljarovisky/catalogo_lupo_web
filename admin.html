@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=16">
+  <link rel="stylesheet" href="/styles.css?v=17">
 </head>
 <body>
   <div class="topbar">
@@ -36,6 +36,7 @@
       <button type="button" data-tab="products-brasil">Brasil</button>
       <button type="button" data-tab="catalogs">Catálogos PDF</button>
       <button type="button" data-tab="lists">Listas de precios</button>
+      <button type="button" data-tab="labels">Etiquetas</button>
       <button type="button" data-tab="users">Usuarios</button>
       <button type="button" data-tab="settings">WhatsApp</button>
       <a class="admin-tab-link" href="/brasil">Armar pedido Brasil</a>
@@ -55,12 +56,7 @@
         </select>
         <button id="publishFiltered" class="btn btn-black" type="button" data-local-only>Publicar filtrados</button>
         <button id="hideFiltered" class="btn btn-ghost" type="button" data-local-only>Ocultar filtrados</button>
-        <select id="bulkBadge" data-local-only>
-          <option value="">Sin etiqueta</option>
-          <option value="promo">Promoción</option>
-          <option value="last">Últimas unidades</option>
-          <option value="sale">Liquidación</option>
-        </select>
+        <select id="bulkBadge" data-local-only></select>
         <button id="applyBulkBadge" class="btn btn-ghost" type="button" data-local-only>Aplicar etiqueta a filtrados</button>
         <a class="btn btn-black" href="/brasil" data-brasil-only hidden>Ir a Pedidos Brasil</a>
         <span class="muted" id="productStats"></span>
@@ -122,6 +118,36 @@
             </tr>
           </thead>
           <tbody id="catalogRowsBrasil"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="panel-labels" class="panel">
+      <p class="admin-scope-blurb">Creá etiquetas con el nombre y color que quieras. Asignalas a productos desde Argentina. Las marcadas en “Promociones” aparecen en esa solapa del catálogo.</p>
+      <form id="newLabelForm" class="label-form">
+        <div class="field">
+          <label for="newLabelName">Nueva etiqueta</label>
+          <input id="newLabelName" maxlength="40" placeholder="Ej: 30% OFF, 2x1, Novedad" required>
+        </div>
+        <div class="field">
+          <label for="newLabelColor">Color</label>
+          <input id="newLabelColor" type="color" value="#6b99de">
+        </div>
+        <label class="label-check"><input id="newLabelPromoTab" type="checkbox" checked> Mostrar en Promociones</label>
+        <button class="btn btn-black" type="submit">Crear etiqueta</button>
+      </form>
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Vista previa</th>
+              <th>Nombre</th>
+              <th>Color</th>
+              <th>Promociones</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="labelRows"></tbody>
         </table>
       </div>
     </section>
@@ -252,28 +278,23 @@
         </div>
         <div class="field">
           <label for="editorBadge">Etiqueta</label>
-          <select id="editorBadge">
-            <option value="">Sin etiqueta</option>
-            <option value="promo">Promoción</option>
-            <option value="last">Últimas unidades</option>
-            <option value="sale">Liquidación</option>
-          </select>
+          <select id="editorBadge"></select>
         </div>
         <div class="field">
-          <label for="editorBadgeText">Texto de la tarjetita (opcional)</label>
-          <input id="editorBadgeText" maxlength="40" placeholder="Ej: 30% OFF, 2x1, Pack x3">
+          <label for="editorBadgeText">Texto en la tarjeta (opcional)</label>
+          <input id="editorBadgeText" maxlength="40" placeholder="Si lo dejás vacío, usa el nombre de la etiqueta">
         </div>
         <div class="field">
           <label for="editorSortOrder">Orden en el catálogo</label>
           <input id="editorSortOrder" type="number" min="0" step="1" inputmode="numeric" placeholder="Vacío = al final">
-          <p class="muted" style="margin:6px 0 0;font-size:12px;">Menor número aparece primero. Con etiqueta “Promoción” entra en la solapa Promociones.</p>
+          <p class="muted" style="margin:6px 0 0;font-size:12px;">Menor número aparece primero. Lencería siempre va antes que el resto.</p>
         </div>
         <button id="saveEditorBtn" class="btn btn-red" type="button">Guardar cambios</button>
       </div>
     </aside>
   </div>
 
-  <script src="/js/common.js?v=4"></script>
-  <script src="/js/admin.js?v=9"></script>
+  <script src="/js/common.js?v=5"></script>
+  <script src="/js/admin.js?v=10"></script>
 </body>
 </html>

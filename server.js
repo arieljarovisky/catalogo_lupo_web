@@ -20,7 +20,12 @@ const DB_PATH = path.join(DATA_DIR, 'db.json');
 const UPLOADS_DIR = IS_VERCEL ? path.join('/tmp', 'uploads') : path.join(ROOT, 'assets', 'uploads');
 const ORDERS_DIR = path.join(DATA_DIR, 'orders');
 const PORT = Number(process.env.PORT) || 3000;
-const BADGE_IDS = new Set(['promo', 'last', 'sale']);
+const LINGERIE_CATALOGS = new Set(['Lencería 2026', 'Lupo Lingerie PV 2026']);
+const DEFAULT_LABELS = [
+  { id: 'promo', name: 'Promoción', color: '#6b99de', promoTab: true },
+  { id: 'last', name: 'Últimas unidades', color: '#111111', promoTab: false },
+  { id: 'sale', name: 'Liquidación', color: '#c45c00', promoTab: true }
+];
 
 if (IS_VERCEL && !USE_SUPABASE) {
   console.warn('Faltan SUPABASE_URL y SUPABASE_SECRET_KEY: en Vercel la data no va a persistir.');
@@ -112,8 +117,66 @@ function seedDb() {
         priceListId: mayoristaId
       }
     ],
-    settings: { whatsappNumber: '' }
+    settings: { whatsappNumber: '' },
+    customLabels: defaultCustomLabels()
   };
+}
+
+function defaultCustomLabels() {
+  return DEFAULT_LABELS.map(l => ({ ...l }));
+}
+
+function normalizeCustomLabels(raw) {
+  if (!Array.isArray(raw) || !raw.length) return defaultCustomLabels();
+  const out = [];
+  const seen = new Set();
+  for (const item of raw) {
+    const id = String(item?.id || '').trim().slice(0, 40);
+    const name = String(item?.name || '').trim().slice(0, 40);
+    const color = parseLabelColor(item?.color);
+    if (!id || !name || !color || seen.has(id)) continue;
+    seen.add(id);
+    out.push({ id, name, color, promoTab: Boolean(item?.promoTab) });
+  }
+  return out.length ? out : defaultCustomLabels();
+}
+
+function parseLabelColor(raw) {
+  const value = String(raw || '').trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(value)) return value.toLowerCase();
+  return null;
+}
+
+function slugLabelId(name) {
+  const base = String(name || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 32) || 'etiqueta';
+  let id = base;
+  let n = 2;
+  while ((db.customLabels || []).some(l => l.id === id)) {
+    id = `${base}-${n++}`;
+  }
+  return id;
+}
+
+function labelById(id) {
+  return (db.customLabels || []).find(l => l.id === id) || null;
+}
+
+function catalogSortKey(catalogName) {
+  return LINGERIE_CATALOGS.has(catalogName) ? 0 : 1;
+}
+
+function sortCatalogSummaries(summaries) {
+  return [...summaries].sort((a, b) => {
+    const diff = catalogSortKey(a.catalog) - catalogSortKey(b.catalog);
+    if (diff) return diff;
+    return String(a.catalog || '').localeCompare(String(b.catalog || ''), 'es');
+  });
 }
 
 function normalizeDb(parsed) {
@@ -124,6 +187,7 @@ function normalizeDb(parsed) {
   data.productMeta = data.productMeta && typeof data.productMeta === 'object' ? data.productMeta : {};
   data.settings = data.settings && typeof data.settings === 'object' ? data.settings : {};
   if (typeof data.settings.whatsappNumber !== 'string') data.settings.whatsappNumber = '';
+  data.customLabels = normalizeCustomLabels(data.customLabels);
   if (!data.sessionSecret) data.sessionSecret = crypto.randomBytes(24).toString('hex');
   const validIds = new Set(PRODUCTS.map(p => p.id));
   data.publishedIds = data.publishedIds.filter(id => validIds.has(id));
@@ -400,7 +464,15 @@ async function readOrder(token) {
 function parseBadge(raw) {
   const badge = String(raw || '').trim();
   if (!badge) return '';
-  return BADGE_IDS.has(badge) ? badge : null;
+  return labelById(badge) ? badge : null;
+}
+
+function clearLabelFromProducts(labelId) {
+  for (const id of Object.keys(db.productMeta || {})) {
+    if (db.productMeta[id]?.badge === labelId) {
+      setMeta(id, { badge: '', badgeText: '' });
+    }
+  }
 }
 
 function parseBadgeText(raw) {
@@ -460,7 +532,7 @@ function catalogSummaries(list) {
     }
     map.get(p.catalog).count += 1;
   }
-  return [...map.values()];
+  return sortCatalogSummaries([...map.values()]);
 }
 
 function catalogProduct(p, priceArs, { includeFob = false } = {}) {
@@ -761,6 +833,51 @@ app.patch('/api/admin/settings', requireAdmin, async (req, res) => {
   res.json({ whatsappNumber: db.settings.whatsappNumber });
 });
 
+app.get('/api/admin/labels', requireAdmin, (req, res) => {
+  res.json({ labels: db.customLabels || [] });
+});
+
+app.post('/api/admin/labels', requireAdmin, async (req, res) => {
+  const name = String(req.body?.name || '').trim().slice(0, 40);
+  const color = parseLabelColor(req.body?.color);
+  if (!name) return res.status(400).json({ error: 'Ingresá un nombre para la etiqueta.' });
+  if (!color) return res.status(400).json({ error: 'Color inválido.' });
+  db.customLabels = db.customLabels || defaultCustomLabels();
+  const id = slugLabelId(name);
+  const label = { id, name, color, promoTab: Boolean(req.body?.promoTab) };
+  db.customLabels.push(label);
+  await saveDb(db);
+  res.json({ label, labels: db.customLabels });
+});
+
+app.patch('/api/admin/labels/:id', requireAdmin, async (req, res) => {
+  const label = labelById(req.params.id);
+  if (!label) return res.status(404).json({ error: 'Etiqueta no encontrada' });
+  if (req.body?.name != null) {
+    const name = String(req.body.name || '').trim().slice(0, 40);
+    if (!name) return res.status(400).json({ error: 'El nombre no puede quedar vacío.' });
+    label.name = name;
+  }
+  if (req.body?.color != null) {
+    const color = parseLabelColor(req.body.color);
+    if (!color) return res.status(400).json({ error: 'Color inválido.' });
+    label.color = color;
+  }
+  if (req.body?.promoTab != null) label.promoTab = Boolean(req.body.promoTab);
+  await saveDb(db);
+  res.json({ label, labels: db.customLabels });
+});
+
+app.delete('/api/admin/labels/:id', requireAdmin, async (req, res) => {
+  const id = String(req.params.id || '').trim();
+  if (!labelById(id)) return res.status(404).json({ error: 'Etiqueta no encontrada' });
+  db.customLabels = (db.customLabels || []).filter(l => l.id !== id);
+  if (!db.customLabels.length) db.customLabels = defaultCustomLabels();
+  clearLabelFromProducts(id);
+  await saveDb(db);
+  res.json({ labels: db.customLabels });
+});
+
 app.post('/api/orders', requireAuth, async (req, res) => {
   try {
   const incoming = Array.isArray(req.body?.items) ? req.body.items : [];
@@ -853,6 +970,7 @@ app.get('/api/catalog', requireAuth, (req, res) => {
   res.json({
     products: items,
     catalogs: catalogSummaries(items),
+    labels: db.customLabels || [],
     priceListName: list ? list.name : null
   });
 });
@@ -862,6 +980,7 @@ app.get('/api/admin/catalog-brasil', requireAdmin, (req, res) => {
   res.json({
     products: items,
     catalogs: catalogSummaries(items),
+    labels: db.customLabels || [],
     mode: 'brasil'
   });
 });

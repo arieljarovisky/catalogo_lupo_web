@@ -771,7 +771,30 @@ body.brasil-mode .topbar span:nth-child(2) { font-weight: 800; }
 .mini-tag.tag-promo { background: var(--red); }
 .mini-tag.tag-last { background: #111; }
 .mini-tag.tag-sale { background: #c45c00; }
-.admin-table select { min-width: 150px; }
+.label-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 18px;
+}
+.label-form .field { min-width: 180px; }
+.label-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.admin-table input[type="color"] {
+  width: 56px;
+  height: 36px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: #fff;
+}
 .admin-table .sort-order-input {
   width: 72px;
   padding: 8px 10px;

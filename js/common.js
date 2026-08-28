@@ -91,17 +91,47 @@ window.LupoCommon = (() => {
     'Lupo Pijamas PV 2026': 'Pijamas (Brasil)'
   };
   const PRODUCT_BADGES = {
-    promo: { id: 'promo', label: 'Promoción', className: 'tag-promo' },
-    last: { id: 'last', label: 'Últimas unidades', className: 'tag-last' },
-    sale: { id: 'sale', label: 'Liquidación', className: 'tag-sale' }
+    promo: { id: 'promo', label: 'Promoción', color: '#6b99de', promoTab: true },
+    last: { id: 'last', label: 'Últimas unidades', color: '#111111', promoTab: false },
+    sale: { id: 'sale', label: 'Liquidación', color: '#c45c00', promoTab: true }
   };
-  function badgeInfo(id) {
-    return PRODUCT_BADGES[id] || null;
+  let customLabels = { ...PRODUCT_BADGES };
+
+  function setCustomLabels(labels) {
+    customLabels = {};
+    for (const raw of labels || []) {
+      const id = String(raw?.id || '').trim();
+      if (!id) continue;
+      customLabels[id] = {
+        id,
+        label: String(raw?.name || raw?.label || id).trim(),
+        color: String(raw?.color || '#111111'),
+        promoTab: Boolean(raw?.promoTab)
+      };
+    }
   }
+
+  function getCustomLabels() {
+    return Object.values(customLabels);
+  }
+
+  function badgeInfo(id) {
+    return customLabels[id] || null;
+  }
+
   function badgeLabel(id, custom) {
     const text = String(custom || '').trim();
     if (text) return text;
     return badgeInfo(id)?.label || '';
+  }
+
+  function badgeStyle(id) {
+    const color = badgeInfo(id)?.color;
+    return color ? `background:${color}` : '';
+  }
+
+  function isPromoLabel(id) {
+    return Boolean(badgeInfo(id)?.promoTab);
   }
   function catalogLabel(name) {
     return CATALOG_LABELS[name] || translateText(name);
@@ -110,5 +140,5 @@ window.LupoCommon = (() => {
     try { await api('/api/logout', { method: 'POST' }); } catch {}
     window.location.href = '/login';
   }
-  return { escapeHtml, translateText, normalizeText, formatArs, formatFob, parseArs, api, logout, catalogLabel, PRODUCT_BADGES, badgeInfo, badgeLabel };
+  return { escapeHtml, translateText, normalizeText, formatArs, formatFob, parseArs, api, logout, catalogLabel, PRODUCT_BADGES, setCustomLabels, getCustomLabels, badgeInfo, badgeLabel, badgeStyle, isPromoLabel };
 })();

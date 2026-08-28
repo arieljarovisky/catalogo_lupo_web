@@ -1,4 +1,4 @@
-const { escapeHtml, translateText, normalizeText, formatArs, formatFob, api, logout, catalogLabel, PRODUCT_BADGES, badgeInfo, badgeLabel } = window.LupoCommon;
+const { escapeHtml, translateText, normalizeText, formatArs, formatFob, api, logout, catalogLabel, setCustomLabels, getCustomLabels, badgeInfo, badgeLabel, badgeStyle, isPromoLabel } = window.LupoCommon;
 
 const state = { search: '', codes: '', catalog: '', category: '', size: '', color: '', badge: '', view: 'grid', promos: false };
 const $ = id => document.getElementById(id);
@@ -6,6 +6,7 @@ const SURTIDO_SIZE = 'Surtido';
 const SURTIDO_COLOR = 'SURTIDO';
 const SURTIDO_COLOR_NAME = 'Colores surtido';
 const PROMOS_NAV = '__promos__';
+const LINGERIE_CATALOGS = new Set(['Lencería 2026', 'Lupo Lingerie PV 2026']);
 const TEXT_SCALES = ['md', 'lg', 'xl'];
 const brasilMode = (() => {
   const path = (location.pathname || '/').replace(/\/+$/, '') || '/';
@@ -202,12 +203,28 @@ function setActiveCatalog(catalogName) {
 function buildCatalogNav(catalogs) {
   const nav = $('mainNav');
   if (!nav) return;
+  const sorted = [...catalogs].sort((a, b) => {
+    const al = LINGERIE_CATALOGS.has(a.catalog) ? 0 : 1;
+    const bl = LINGERIE_CATALOGS.has(b.catalog) ? 0 : 1;
+    if (al !== bl) return al - bl;
+    return catalogLabel(a.catalog).localeCompare(catalogLabel(b.catalog), 'es');
+  });
   nav.innerHTML = `<button type="button" data-catalog="" class="active">Todos</button>` +
     `<button type="button" data-catalog="${PROMOS_NAV}">Promociones</button>` +
-    catalogs.map(c => `<button type="button" data-catalog="${escapeHtml(c.catalog)}">${escapeHtml(catalogLabel(c.catalog))}</button>`).join('');
+    sorted.map(c => `<button type="button" data-catalog="${escapeHtml(c.catalog)}">${escapeHtml(catalogLabel(c.catalog))}</button>`).join('');
   nav.querySelectorAll('[data-catalog]').forEach(btn => {
     btn.addEventListener('click', () => selectCatalog(btn.dataset.catalog || ''));
   });
+}
+
+function fillBadgeFilter() {
+  const select = $('badgeFilter');
+  if (!select) return;
+  const current = select.value;
+  const labels = getCustomLabels();
+  select.innerHTML = `<option value="">Todas</option>` +
+    labels.map(l => `<option value="${escapeHtml(l.id)}">${escapeHtml(l.label)}</option>`).join('');
+  if (current && labels.some(l => l.id === current)) select.value = current;
 }
 function cartLineKey(item) {
   return [item.code, item.size, item.colorCode, item.colorName || ''].join('||');
@@ -488,6 +505,7 @@ async function init() {
     ? await api('/api/admin/catalog-brasil')
     : await api('/api/catalog');
   products = catalog.products || [];
+  setCustomLabels(catalog.labels || []);
   cart = loadCart();
   cartNotes = loadNotes();
   if ($('cartNotes')) $('cartNotes').value = cartNotes;
@@ -495,8 +513,13 @@ async function init() {
   updateCartBadge();
   updateOrderDock();
   buildCatalogNav(catalog.catalogs || []);
+  fillBadgeFilter();
 
-  opt($('catalogFilter'), unique(products.map(p => p.catalog)), 'Todos', catalogLabel);
+  opt($('catalogFilter'), unique(products.map(p => p.catalog)).sort((a, b) => {
+    const al = LINGERIE_CATALOGS.has(a) ? 0 : 1;
+    const bl = LINGERIE_CATALOGS.has(b) ? 0 : 1;
+    return al !== bl ? al - bl : catalogLabel(a).localeCompare(catalogLabel(b), 'es');
+  }), 'Todos', catalogLabel);
   opt($('categoryFilter'), unique(products.map(p => p.category)), 'Todas');
   opt($('sizeFilter'), unique(products.map(p => p.sizes).flatMap(sizesFrom)), 'Todos', v => v);
   opt($('colorFilter'), unique(products.flatMap(p => (p.colors || []).map(colorLabel))), 'Todos', v => v);
@@ -634,7 +657,7 @@ function filtered() {
     if (q && !blob.includes(q)) return false;
     if (wantedCodes.length && !wantedCodes.some(c => normalizeText(p.code).includes(c))) return false;
     if (state.promos) {
-      if (p.badge !== 'promo') return false;
+      if (!p.badge || !isPromoLabel(p.badge)) return false;
     } else if (state.catalog && p.catalog !== state.catalog) return false;
     if (state.category && p.category !== state.category) return false;
     if (state.size && !normalizeText(p.sizes).includes(normalizeText(state.size))) return false;
@@ -642,6 +665,9 @@ function filtered() {
     if (state.badge && p.badge !== state.badge) return false;
     return true;
   }).sort((a, b) => {
+    const al = LINGERIE_CATALOGS.has(a.catalog) ? 0 : 1;
+    const bl = LINGERIE_CATALOGS.has(b.catalog) ? 0 : 1;
+    if (al !== bl) return al - bl;
     const ao = Number.isFinite(a.sortOrder) ? a.sortOrder : Number.POSITIVE_INFINITY;
     const bo = Number.isFinite(b.sortOrder) ? b.sortOrder : Number.POSITIVE_INFINITY;
     if (ao !== bo) return ao - bo;
@@ -652,20 +678,24 @@ function filtered() {
   });
 }
 function offerTagHtml(p) {
-  const info = badgeInfo(p.badge);
-  if (!info) return '';
-  return `<span class="offer-tag ${info.className}">${escapeHtml(badgeLabel(p.badge, p.badgeText))}</span>`;
+  if (!p.badge) return '';
+  const style = badgeStyle(p.badge);
+  const text = badgeLabel(p.badge, p.badgeText);
+  if (!text) return '';
+  return `<span class="offer-tag" style="${escapeHtml(style)}">${escapeHtml(text)}</span>`;
 }
 
 function renderOfferCards() {
   const wrap = $('offerCards');
   if (!wrap) return;
-  const counts = { promo: 0, last: 0, sale: 0 };
-  products.forEach(p => { if (counts[p.badge] != null) counts[p.badge] += 1; });
-  const cards = Object.values(PRODUCT_BADGES).filter(b => counts[b.id] > 0);
+  const counts = {};
+  products.forEach(p => {
+    if (p.badge) counts[p.badge] = (counts[p.badge] || 0) + 1;
+  });
+  const cards = getCustomLabels().filter(l => counts[l.id] > 0);
   wrap.hidden = !cards.length;
   wrap.innerHTML = cards.map(b => `
-    <button type="button" class="offer-card ${b.className} ${state.badge === b.id ? 'active' : ''}" data-offer="${b.id}">
+    <button type="button" class="offer-card ${state.badge === b.id ? 'active' : ''}" data-offer="${escapeHtml(b.id)}" style="border-left:4px solid ${escapeHtml(b.color)}">
       <b>${escapeHtml(b.label)}</b>
       <span>${counts[b.id]} ${counts[b.id] === 1 ? 'artículo' : 'artículos'}</span>
     </button>
@@ -795,11 +825,12 @@ function openModal(id) {
   modalProduct = p;
   $('modalImage').src = productImage(p);
   const offer = $('modalOffer');
-  const info = badgeInfo(p.badge);
+  const text = badgeLabel(p.badge, p.badgeText);
   if (offer) {
-    offer.hidden = !info;
-    offer.className = `offer-tag ${info ? info.className : ''}`;
-    offer.textContent = info ? badgeLabel(p.badge, p.badgeText) : '';
+    offer.hidden = !text;
+    offer.className = 'offer-tag';
+    offer.style.cssText = badgeStyle(p.badge);
+    offer.textContent = text;
   }
   $('modalTitle').textContent = productDisplayName(p);
   $('modalCode').textContent = p.code;
