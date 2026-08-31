@@ -899,12 +899,7 @@ app.delete('/api/admin/labels/:id', requireAdmin, async (req, res) => {
   res.json({ labels: db.customLabels });
 });
 
-app.post('/api/orders', requireAuth, async (req, res) => {
-  try {
-  const incoming = Array.isArray(req.body?.items) ? req.body.items : [];
-  const notes = String(req.body?.notes || '').trim().slice(0, 800);
-  if (!incoming.length) return res.status(400).json({ error: 'El pedido está vacío.' });
-  if (incoming.length > 250) return res.status(400).json({ error: 'El pedido tiene demasiadas líneas.' });
+function parseMayoristaOrderItems(incoming) {
   const items = [];
   for (const raw of incoming) {
     const code = String(raw?.code || '').trim().slice(0, 40);
@@ -921,7 +916,43 @@ app.post('/api/orders', requireAuth, async (req, res) => {
       priceArs: Number.isFinite(price) ? price : null
     });
   }
-  if (!items.length) return res.status(400).json({ error: 'No hay artículos válidos en el pedido.' });
+  return items;
+}
+
+function parseBrasilOrderItems(incoming) {
+  const items = [];
+  for (const raw of incoming) {
+    const code = String(raw?.code || '').trim().slice(0, 40);
+    const qty = Math.max(1, Math.min(9999, parseInt(raw?.qty, 10) || 0));
+    if (!code || !qty) continue;
+    const fob = Number(raw?.fobUsd);
+    items.push({
+      code,
+      name: String(raw?.name || '').trim().slice(0, 160),
+      size: String(raw?.size || '').trim().slice(0, 40),
+      colorCode: String(raw?.colorCode || '').trim().slice(0, 40),
+      colorName: String(raw?.colorName || '').trim().slice(0, 80),
+      qty,
+      fobUsd: Number.isFinite(fob) ? fob : null
+    });
+  }
+  return items;
+}
+
+function validateOrderInput(incoming, items) {
+  if (!incoming.length) return 'El pedido está vacío.';
+  if (incoming.length > 250) return 'El pedido tiene demasiadas líneas.';
+  if (!items.length) return 'No hay artículos válidos en el pedido.';
+  return '';
+}
+
+app.post('/api/orders', requireAuth, async (req, res) => {
+  try {
+  const incoming = Array.isArray(req.body?.items) ? req.body.items : [];
+  const notes = String(req.body?.notes || '').trim().slice(0, 800);
+  const items = parseMayoristaOrderItems(incoming);
+  const validationError = validateOrderInput(incoming, items);
+  if (validationError) return res.status(400).json({ error: validationError });
   const token = crypto.randomBytes(16).toString('hex');
   const filename = `pedido-lupo-${new Date().toISOString().slice(0, 10)}-${token.slice(0, 6)}.xls`;
   const xml = buildOrderExcelXml({
@@ -962,6 +993,27 @@ app.post('/api/orders', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('POST /api/orders', err);
     res.status(500).json({ error: err.message || 'No se pudo guardar el pedido.' });
+  }
+});
+
+app.post('/api/orders/export', requireAuth, (req, res) => {
+  try {
+    const incoming = Array.isArray(req.body?.items) ? req.body.items : [];
+    const notes = String(req.body?.notes || '').trim().slice(0, 800);
+    const items = parseMayoristaOrderItems(incoming);
+    const validationError = validateOrderInput(incoming, items);
+    if (validationError) return res.status(400).json({ error: validationError });
+    const filename = `pedido-lupo-${new Date().toISOString().slice(0, 10)}.xls`;
+    const xml = buildOrderExcelXml({
+      clientName: req.user.name || req.user.username,
+      username: req.user.username,
+      items,
+      notes
+    });
+    res.json({ filename, xml });
+  } catch (err) {
+    console.error('POST /api/orders/export', err);
+    res.status(500).json({ error: err.message || 'No se pudo exportar el pedido.' });
   }
 });
 
@@ -1012,25 +1064,9 @@ app.post('/api/admin/orders-brasil', requireAdmin, async (req, res) => {
   try {
   const incoming = Array.isArray(req.body?.items) ? req.body.items : [];
   const notes = String(req.body?.notes || '').trim().slice(0, 800);
-  if (!incoming.length) return res.status(400).json({ error: 'El pedido está vacío.' });
-  if (incoming.length > 250) return res.status(400).json({ error: 'El pedido tiene demasiadas líneas.' });
-  const items = [];
-  for (const raw of incoming) {
-    const code = String(raw?.code || '').trim().slice(0, 40);
-    const qty = Math.max(1, Math.min(9999, parseInt(raw?.qty, 10) || 0));
-    if (!code || !qty) continue;
-    const fob = Number(raw?.fobUsd);
-    items.push({
-      code,
-      name: String(raw?.name || '').trim().slice(0, 160),
-      size: String(raw?.size || '').trim().slice(0, 40),
-      colorCode: String(raw?.colorCode || '').trim().slice(0, 40),
-      colorName: String(raw?.colorName || '').trim().slice(0, 80),
-      qty,
-      fobUsd: Number.isFinite(fob) ? fob : null
-    });
-  }
-  if (!items.length) return res.status(400).json({ error: 'No hay artículos válidos en el pedido.' });
+  const items = parseBrasilOrderItems(incoming);
+  const validationError = validateOrderInput(incoming, items);
+  if (validationError) return res.status(400).json({ error: validationError });
   const token = crypto.randomBytes(16).toString('hex');
   const filename = `pedido-brasil-${new Date().toISOString().slice(0, 10)}-${token.slice(0, 6)}.xls`;
   const xml = buildOrderExcelXml({
@@ -1070,6 +1106,28 @@ app.post('/api/admin/orders-brasil', requireAdmin, async (req, res) => {
   } catch (err) {
     console.error('POST /api/admin/orders-brasil', err);
     res.status(500).json({ error: err.message || 'No se pudo guardar el pedido.' });
+  }
+});
+
+app.post('/api/admin/orders-brasil/export', requireAdmin, (req, res) => {
+  try {
+    const incoming = Array.isArray(req.body?.items) ? req.body.items : [];
+    const notes = String(req.body?.notes || '').trim().slice(0, 800);
+    const items = parseBrasilOrderItems(incoming);
+    const validationError = validateOrderInput(incoming, items);
+    if (validationError) return res.status(400).json({ error: validationError });
+    const filename = `pedido-brasil-${new Date().toISOString().slice(0, 10)}.xls`;
+    const xml = buildOrderExcelXml({
+      clientName: req.user.name || req.user.username,
+      username: req.user.username,
+      items,
+      notes,
+      currency: 'USD'
+    });
+    res.json({ filename, xml });
+  } catch (err) {
+    console.error('POST /api/admin/orders-brasil/export', err);
+    res.status(500).json({ error: err.message || 'No se pudo exportar el pedido.' });
   }
 });
 

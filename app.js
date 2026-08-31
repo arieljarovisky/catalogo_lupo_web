@@ -575,6 +575,7 @@ async function init() {
     if (e.target.matches('[data-close-cart]')) closeCart();
   });
   $('clearCartBtn').addEventListener('click', clearCart);
+  $('downloadExcelBtn')?.addEventListener('click', downloadOrderExcel);
   $('sendWhatsappBtn').addEventListener('click', sendOrderWhatsapp);
   $('cartNotes').addEventListener('input', () => {
     cartNotes = $('cartNotes').value.slice(0, 800);
@@ -870,6 +871,7 @@ function renderCart() {
     : 'Sin artículos';
   $('clearCartBtn').disabled = !cart.length;
   if ($('sendWhatsappBtn')) $('sendWhatsappBtn').disabled = !cart.length;
+  if ($('downloadExcelBtn')) $('downloadExcelBtn').disabled = !cart.length;
   if ($('cartNotes') && $('cartNotes').value !== cartNotes) $('cartNotes').value = cartNotes;
   if (!cart.length) {
     $('cartItems').innerHTML = `<div class="cart-empty"><p>Todavía no agregaste productos.</p><p>Abrí un producto, elegí talle, color y cantidad, y sumalo al pedido.</p></div>`;
@@ -934,6 +936,27 @@ function downloadExcelFile(xml, filename) {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+}
+
+async function downloadOrderExcel() {
+  if (!cart.length) {
+    alert('El pedido está vacío.');
+    return;
+  }
+  const btn = $('downloadExcelBtn');
+  if (btn) btn.disabled = true;
+  try {
+    const endpoint = brasilMode ? '/api/admin/orders-brasil/export' : '/api/orders/export';
+    const data = await api(endpoint, {
+      method: 'POST',
+      body: { items: cart, notes: cartNotes }
+    });
+    if (data.xml) downloadExcelFile(data.xml, data.filename);
+  } catch (err) {
+    alert(err.message || 'No se pudo descargar el Excel.');
+  } finally {
+    if (btn) btn.disabled = !cart.length;
+  }
 }
 
 async function sendOrderWhatsapp() {
