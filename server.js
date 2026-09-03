@@ -41,7 +41,13 @@ function loadProducts() {
 
 const PRODUCTS = loadProducts();
 const PRODUCT_BY_ID = new Map(PRODUCTS.map(p => [p.id, p]));
-const LOCAL_CATALOGS = new Set(['Boxers y Slips 2026', 'Lencería 2026', 'Medias 2026']);
+const LOCAL_CATALOGS = new Set([
+  'Boxers y Slips 2026',
+  'Lencería 2026',
+  'Medias 2026',
+  'Lupo Pijamas Invierno',
+  'Lupo Pijamas Verano'
+]);
 
 function productOrigin(p) {
   const pdf = String(p?.pdf || '').replace(/\\/g, '/');

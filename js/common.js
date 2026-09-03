@@ -89,8 +89,8 @@ window.LupoCommon = (() => {
     'Lupo Meias Kids PV 2026': 'Medias kids (Brasil)',
     'Lupo Kids Seamless PV 2026': 'Kids seamless (Brasil)',
     'Lupo Pijamas PV 2026': 'Pijamas (Brasil)',
-    'Lupo Pijamas Invierno': 'Pijamas invierno (Brasil)',
-    'Lupo Pijamas Verano': 'Pijamas verano (Brasil)'
+    'Lupo Pijamas Invierno': 'Pijamas invierno',
+    'Lupo Pijamas Verano': 'Pijamas verano'
   };
   const PRODUCT_BADGES = {
     promo: { id: 'promo', label: 'Promoción', color: '#6b99de', promoTab: true },

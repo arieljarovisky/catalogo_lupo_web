@@ -78,18 +78,6 @@
     "origin": "brasil"
   },
   {
-    "id": "pijamas-invierno",
-    "name": "Lupo Pijamas Invierno",
-    "pdf": "pdfs/lupo-pijamas-invierno.pdf",
-    "origin": "brasil"
-  },
-  {
-    "id": "pijamas-verano",
-    "name": "Lupo Pijamas Verano",
-    "pdf": "pdfs/lupo-pijamas-verano.pdf",
-    "origin": "brasil"
-  },
-  {
     "id": "boxers-local",
     "name": "Boxers y Slips 2026",
     "pdf": "pdfs/nuevos-catalogos/boxers-slips-2026.pdf",
@@ -105,6 +93,18 @@
     "id": "medias-local",
     "name": "Medias 2026",
     "pdf": "pdfs/nuevos-catalogos/medias-2026.pdf",
+    "origin": "local"
+  },
+  {
+    "id": "pijamas-invierno-local",
+    "name": "Lupo Pijamas Invierno",
+    "pdf": "pdfs/nuevos-catalogos/pijamas-invierno.pdf",
+    "origin": "local"
+  },
+  {
+    "id": "pijamas-verano-local",
+    "name": "Lupo Pijamas Verano",
+    "pdf": "pdfs/nuevos-catalogos/pijamas-verano.pdf",
     "origin": "local"
   }
 ]

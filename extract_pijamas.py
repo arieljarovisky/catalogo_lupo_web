@@ -16,13 +16,13 @@ CATALOGS = [
     {
         "key": "lupo-pijamas-invierno",
         "name": "Lupo Pijamas Invierno",
-        "pdf": "pdfs/lupo-pijamas-invierno.pdf",
+        "pdf": "pdfs/nuevos-catalogos/pijamas-invierno.pdf",
         "category_fallback": "Pijamas",
     },
     {
         "key": "lupo-pijamas-verano",
         "name": "Lupo Pijamas Verano",
-        "pdf": "pdfs/lupo-pijamas-verano.pdf",
+        "pdf": "pdfs/nuevos-catalogos/pijamas-verano.pdf",
         "category_fallback": "Pijamas",
     },
 ]
