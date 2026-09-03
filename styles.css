@@ -140,6 +140,26 @@ a.btn[hidden] {
   gap: 4px;
   flex-wrap: wrap;
 }
+@media (max-width: 860px) {
+  .main-nav {
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    padding: 0 12px;
+  }
+  .main-nav::-webkit-scrollbar {
+    display: none;
+  }
+  .main-nav button {
+    flex-shrink: 0;
+    white-space: nowrap;
+    padding: 10px 14px;
+    font-size: 12px;
+  }
+}
 .main-nav button {
   border: 0;
   background: transparent;
