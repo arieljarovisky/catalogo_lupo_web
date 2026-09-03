@@ -1040,40 +1040,54 @@ body.brasil-mode .topbar span:nth-child(2) { font-weight: 800; }
 }
 
 @media (max-width: 860px) {
-  /* Header layout - stack vertically */
+  /* Header layout - compact single row with logo and actions */
   .header-row, .admin-header .header-row { 
-    grid-template-columns: 1fr; 
-    gap: 12px;
-    padding: 12px 16px;
+    grid-template-columns: auto 1fr auto;
+    gap: 10px;
+    padding: 8px 12px;
+    align-items: center;
   }
   
-  /* Logo row with menu button */
+  /* Logo stays left */
   .header-row > a:first-child {
     display: flex;
-    justify-content: center;
+    justify-content: flex-start;
   }
+  .logo-img { height: 28px; }
   
-  /* Search box full width */
+  /* Search box in middle - compact */
   .search-box {
-    order: 3;
+    order: 0;
+  }
+  .search-box input {
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+  .search-box button {
+    padding: 0 10px;
+    min-width: 60px;
+    font-size: 12px;
   }
   
-  /* Header actions - wrap better */
+  /* Header actions - only essential buttons */
   .header-actions {
-    justify-content: center;
-    max-width: 100%;
-    order: 2;
+    justify-content: flex-end;
+    max-width: none;
+    order: 0;
+    gap: 6px;
+  }
+  .header-actions .btn {
+    padding: 6px 10px;
+    font-size: 12px;
   }
   
-  /* User chip smaller */
-  .user-chip {
-    text-align: center;
-    font-size: 11px;
-  }
-  .user-chip b { font-size: 12px; }
-  
-  /* A11y tools hide on mobile */
+  /* Hide non-essential elements on mobile */
+  .user-chip { display: none; }
   .a11y-tools { display: none; }
+  .header-actions .btn-ghost { display: none; }
+  
+  /* Keep only Salir and Pedido buttons */
+  #logoutBtn, #cartBtn { display: inline-flex; }
   
   /* Catalog layout */
   .catalog-layout { grid-template-columns: 1fr; }
@@ -1093,35 +1107,31 @@ body.brasil-mode .topbar span:nth-child(2) { font-weight: 800; }
   }
   .filters.collapsed h2 { display: none; }
   
-  /* Topbar simplify */
-  .topbar span:nth-child(n+3) { display: none; }
-  .topbar { 
-    gap: 12px;
-    font-size: 10px;
-    padding: 6px 12px;
-  }
+  /* Topbar - hide completely on mobile for more space */
+  .topbar { display: none; }
   
   /* Forms */
   .user-form, .list-form { grid-template-columns: 1fr; }
   .offer-cards { grid-template-columns: 1fr; }
   
-  /* Main nav scrollable */
+  /* Main nav scrollable - more compact */
   .main-nav {
     overflow-x: auto;
     justify-content: flex-start;
-    padding: 0 12px;
+    padding: 0 10px;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
+    border-top: none;
   }
   .main-nav::-webkit-scrollbar { display: none; }
   .main-nav button {
     flex-shrink: 0;
-    padding: 10px 14px;
-    font-size: 12px;
+    padding: 8px 12px;
+    font-size: 11px;
   }
   
-  /* Wrap padding */
-  .wrap { padding: 16px 12px 100px; }
+  /* Wrap padding - less top padding */
+  .wrap { padding: 10px 10px 100px; }
 }
 
 @media (max-width: 760px) {
@@ -1217,21 +1227,6 @@ body.brasil-mode .topbar span:nth-child(2) { font-weight: 800; }
   .view-tools { width: 100%; }
   .view-tools .btn { flex: 1; }
   
-  /* Header actions - scroll horizontally */
-  .header-actions {
-    overflow-x: auto;
-    flex-wrap: nowrap;
-    justify-content: flex-start;
-    gap: 6px;
-    padding-bottom: 4px;
-    -webkit-overflow-scrolling: touch;
-  }
-  .header-actions .btn {
-    flex-shrink: 0;
-    padding: 8px 10px;
-    font-size: 12px;
-  }
-  
   /* Cart drawer */
   .cart-panel { width: 100%; }
   .cart-panel-head, .cart-panel-foot { padding: 14px; }
@@ -1261,24 +1256,40 @@ body.brasil-mode .topbar span:nth-child(2) { font-weight: 800; }
   .grid { grid-template-columns: 1fr; }
   
   /* Bigger touch targets */
-  .btn { min-height: 44px; }
+  .btn { min-height: 40px; }
   
-  /* Logo smaller */
-  .logo-img { height: 28px; }
-  
-  /* Search compact */
-  .search-box input { padding: 10px 12px; font-size: 14px; }
-  .search-box button { 
-    padding: 0 12px; 
-    min-width: 70px;
-    font-size: 12px;
+  /* Header even more compact */
+  .header-row {
+    padding: 6px 10px;
+    gap: 8px;
   }
   
-  /* Hide some header buttons */
-  .header-actions .user-chip { display: none; }
+  /* Logo smaller */
+  .logo-img { height: 24px; }
   
-  /* Main nav smaller */
-  .main-nav button { padding: 8px 10px; font-size: 11px; }
+  /* Search very compact */
+  .search-box input { padding: 6px 8px; font-size: 12px; }
+  .search-box button { 
+    padding: 0 8px; 
+    min-width: 50px;
+    font-size: 11px;
+  }
+  
+  /* Header buttons minimal */
+  .header-actions .btn {
+    padding: 5px 8px;
+    font-size: 11px;
+  }
+  #cartBtn { padding: 5px 8px; }
+  .cart-count {
+    min-width: 16px;
+    height: 16px;
+    font-size: 10px;
+  }
+  
+  /* Main nav even smaller */
+  .main-nav { padding: 0 8px; }
+  .main-nav button { padding: 6px 10px; font-size: 10px; }
   
   /* Product info tighter */
   .info h4 { font-size: 14px; min-height: 0; }
