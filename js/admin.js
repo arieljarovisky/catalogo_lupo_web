@@ -1,4 +1,4 @@
-const { escapeHtml, translateText, formatArs, formatFob, parseArs, api, logout, normalizeText, catalogLabel, setCustomLabels, badgeLabel } = window.LupoCommon;
+const { escapeHtml, translateText, formatArs, formatFob, parseArs, api, logout, normalizeText, catalogLabel, setCustomLabels, badgeLabel, sizesFrom, stockKey, stockQty } = window.LupoCommon;
 
 const $ = id => document.getElementById(id);
 const PRODUCT_TAB_SCOPES = { 'products-local': 'local', 'products-brasil': 'brasil' };
@@ -235,7 +235,12 @@ function fillEditor(p) {
   if ($('editorSortOrder')) $('editorSortOrder').value = Number.isFinite(p.sortOrder) ? p.sortOrder : '';
   $('restoreImageBtn').disabled = !p.hasCustomImage;
   $('restoreNameBtn').disabled = !p.hasCustomName;
+  const local = productOrigin(p) === 'local';
+  if ($('editorPublishedWrap')) $('editorPublishedWrap').hidden = !local;
+  if ($('editorPublished')) $('editorPublished').checked = Boolean(p.published);
+  if ($('editorStockField')) $('editorStockField').hidden = !local;
   renderEditorColors(p);
+  renderEditorStock(p);
 }
 
 function colorLabelAdmin(c) {
@@ -268,6 +273,44 @@ function renderEditorColors(p) {
       </div>
     </article>`;
   }).join('');
+}
+
+function renderEditorStock(p) {
+  const wrap = $('editorStockWrap');
+  if (!wrap) return;
+  if (productOrigin(p) !== 'local') {
+    wrap.innerHTML = '';
+    return;
+  }
+  const sizes = sizesFrom(p.sizes);
+  const colors = (p.colors && p.colors.length) ? p.colors : [{ code: '-', name: 'Sin color' }];
+  const stock = p.stock || {};
+  const head = `<tr><th>Talle</th>${colors.map(c => `<th title="${escapeHtml(colorLabelAdmin(c))}">${escapeHtml(colorLabelAdmin(c))}</th>`).join('')}</tr>`;
+  const body = sizes.map(size => {
+    const cells = colors.map(c => {
+      const code = String(c.code || '-');
+      const key = stockKey(size, code);
+      const qty = stockQty(stock, size, code);
+      const value = qty == null ? '' : String(qty);
+      return `<td><input type="number" min="0" step="1" inputmode="numeric" data-stock-size="${escapeHtml(size)}" data-stock-color="${escapeHtml(code)}" value="${escapeHtml(value)}" placeholder="—"></td>`;
+    }).join('');
+    return `<tr><td>${escapeHtml(size)}</td>${cells}</tr>`;
+  }).join('');
+  wrap.innerHTML = `<table class="editor-stock-table"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+}
+
+function readEditorStock() {
+  const wrap = $('editorStockWrap');
+  if (!wrap) return {};
+  const stock = {};
+  wrap.querySelectorAll('input[data-stock-size][data-stock-color]').forEach(input => {
+    const raw = input.value.trim();
+    if (raw === '') return;
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return;
+    stock[stockKey(input.dataset.stockSize, input.dataset.stockColor)] = Math.max(0, Math.round(n));
+  });
+  return stock;
 }
 
 function openEditor(id) {
@@ -611,14 +654,20 @@ async function init() {
     try {
       const name = $('editorName').value.trim();
       if (!name) return showFlash('El título no puede quedar vacío.', true);
+      const p = products.find(x => x.id === editingId);
+      const body = {
+        name,
+        badge: $('editorBadge').value,
+        badgeText: $('editorBadgeText').value,
+        sortOrder: $('editorSortOrder')?.value.trim() === '' ? null : Number($('editorSortOrder').value)
+      };
+      if (p && productOrigin(p) === 'local') {
+        body.stock = readEditorStock();
+        body.published = Boolean($('editorPublished')?.checked);
+      }
       const data = await api(`/api/admin/products/${editingId}`, {
         method: 'PATCH',
-        body: {
-          name,
-          badge: $('editorBadge').value,
-          badgeText: $('editorBadgeText').value,
-          sortOrder: $('editorSortOrder')?.value.trim() === '' ? null : Number($('editorSortOrder').value)
-        }
+        body
       });
       upsertProduct(data.product);
       renderProducts();

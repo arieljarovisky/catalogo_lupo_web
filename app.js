@@ -1,4 +1,4 @@
-const { escapeHtml, translateText, normalizeText, formatArs, formatFob, api, logout, catalogLabel, setCustomLabels, getCustomLabels, badgeInfo, badgeLabel, badgeStyle, isPromoLabel } = window.LupoCommon;
+const { escapeHtml, translateText, normalizeText, formatArs, formatFob, api, logout, catalogLabel, setCustomLabels, getCustomLabels, badgeInfo, badgeLabel, badgeStyle, isPromoLabel, sizesFrom, stockQty } = window.LupoCommon;
 
 const state = { search: '', codes: '', catalog: '', category: '', size: '', color: '', badge: '', view: 'grid', promos: false };
 const $ = id => document.getElementById(id);
@@ -40,15 +40,6 @@ function unique(arr) {
 }
 function opt(select, values, label, translate = translateText) {
   select.innerHTML = `<option value="">${label}</option>` + values.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(translate(v))}</option>`).join('');
-}
-function sizesFrom(value) {
-  const raw = (value || '').toString().trim();
-  if (!raw) return ['Único'];
-  let parts = raw.split(/\s*[•·|]\s*/).map(x => x.trim()).filter(Boolean);
-  if (parts.length === 1 && /[\/,]/.test(parts[0]) && !/\d/.test(parts[0])) {
-    parts = parts[0].split(/[\/,]/).map(x => x.trim()).filter(Boolean);
-  }
-  return parts.length ? parts : ['Único'];
 }
 function colorLabel(c) {
   const name = translateText(c.name || '').trim();
@@ -133,7 +124,8 @@ function applyProductUpdate(updated) {
       hasCustomImage: Boolean(c.hasCustomImage)
     })),
     badge: updated.badge != null ? updated.badge : prev.badge,
-    badgeText: updated.badgeText != null ? updated.badgeText : prev.badgeText
+    badgeText: updated.badgeText != null ? updated.badgeText : prev.badgeText,
+    stock: updated.stock != null ? updated.stock : prev.stock
   };
   if (modalProduct?.id === updated.id) {
     modalProduct = products[idx];
@@ -564,7 +556,11 @@ async function init() {
     const step = e.target.closest('[data-qty-step]');
     if (!step) return;
     const input = $('cartQty');
-    const next = Math.max(1, (parseInt(input.value, 10) || 1) + Number(step.dataset.qtyStep));
+    const maxAttr = input.getAttribute('max');
+    const max = maxAttr != null && maxAttr !== '' ? Number(maxAttr) : null;
+    let next = Math.max(1, (parseInt(input.value, 10) || 1) + Number(step.dataset.qtyStep));
+    if (Number.isFinite(max) && max >= 0) next = Math.min(next, Math.max(0, max) || 1);
+    if (Number.isFinite(max) && max <= 0) next = 1;
     input.value = String(next);
   });
   $('cartBtn').addEventListener('click', openCart);
@@ -733,11 +729,52 @@ function fillCartForm(p) {
     `<button type="button" class="choice-chip" data-color="${escapeHtml(SURTIDO_COLOR)}" data-name="Surtido" data-image="">Surtido</button>`
   ].join('');
   $('cartQty').value = 1;
+  $('cartQty').removeAttribute('max');
   $('cartFormMsg').hidden = true;
   if (sizes.length === 1) selectSize(sizes[0]);
   else selectSize('');
   if (colors.length === 1) selectColor(colors[0].code, translateText(colors[0].name));
   else selectColor('', '');
+  syncStockHint();
+}
+
+function selectedVariantStock() {
+  const p = modalProduct;
+  if (!p || brasilMode) return null;
+  const size = $('cartSize')?.value || '';
+  const colorCode = $('cartColor')?.value || '';
+  if (!size || !colorCode || size === SURTIDO_SIZE || colorCode === SURTIDO_COLOR) return null;
+  return stockQty(p.stock, size, colorCode);
+}
+
+function syncStockHint() {
+  const hint = $('cartStockHint');
+  const addBtn = document.querySelector('#addToCartForm button[type="submit"]');
+  if (!hint) return;
+  const available = selectedVariantStock();
+  if (available == null) {
+    hint.hidden = true;
+    hint.textContent = '';
+    hint.className = 'stock-hint';
+    $('cartQty')?.removeAttribute('max');
+    if (addBtn) addBtn.disabled = false;
+    return;
+  }
+  hint.hidden = false;
+  if (available <= 0) {
+    hint.textContent = 'Sin stock para este talle y color';
+    hint.className = 'stock-hint warn';
+    $('cartQty').value = 1;
+    $('cartQty').setAttribute('max', '0');
+    if (addBtn) addBtn.disabled = true;
+    return;
+  }
+  hint.textContent = `Stock disponible: ${available}`;
+  hint.className = 'stock-hint ok';
+  $('cartQty').setAttribute('max', String(available));
+  const qty = Math.max(1, parseInt($('cartQty').value, 10) || 1);
+  if (qty > available) $('cartQty').value = available;
+  if (addBtn) addBtn.disabled = false;
 }
 
 function selectSize(value) {
@@ -745,6 +782,7 @@ function selectSize(value) {
   $('cartSizeChips').querySelectorAll('.choice-chip').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.size === value);
   });
+  syncStockHint();
 }
 function selectColor(code, name) {
   $('cartColor').value = code || '';
@@ -764,6 +802,7 @@ function selectColor(code, name) {
     }
   }
   syncModalPhotoEdit();
+  syncStockHint();
 }
 function onChipClick(e, kind) {
   const btn = e.target.closest('.choice-chip');
@@ -819,10 +858,31 @@ function onAddToCart(e) {
   const size = $('cartSize').value;
   const colorCode = $('cartColor').value;
   const colorName = $('cartColor').dataset.name || '';
-  const qty = Math.max(1, parseInt($('cartQty').value, 10) || 1);
+  let qty = Math.max(1, parseInt($('cartQty').value, 10) || 1);
   if (!size || !colorCode) {
     showCartMsg('Elegí talle y color para continuar.', false);
     return;
+  }
+  const available = (!brasilMode && size !== SURTIDO_SIZE && colorCode !== SURTIDO_COLOR)
+    ? stockQty(p.stock, size, colorCode)
+    : null;
+  let capped = false;
+  if (available != null) {
+    if (available <= 0) {
+      showCartMsg('Sin stock para este talle y color.', false);
+      return;
+    }
+    const existingKey = cartLineKey({ code: p.code, size, colorCode, colorName });
+    const existingQty = cart.find(item => cartLineKey(item) === existingKey)?.qty || 0;
+    if (existingQty + qty > available) {
+      const room = available - existingQty;
+      if (room <= 0) {
+        showCartMsg(`Ya tenés el máximo disponible (${available}).`, false);
+        return;
+      }
+      qty = room;
+      capped = true;
+    }
   }
   const incoming = {
     productId: p.id,
@@ -850,8 +910,9 @@ function onAddToCart(e) {
     cart.push(incoming);
   }
   saveCart();
-  showCartMsg(`Agregado: ${qty} u.`);
+  showCartMsg(capped ? `Se agregaron ${qty} u. (máximo disponible).` : `Agregado: ${qty} u.`);
   $('cartQty').value = 1;
+  syncStockHint();
 }
 
 function openCart() {
