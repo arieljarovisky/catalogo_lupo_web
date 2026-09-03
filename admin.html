@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=17">
+  <link rel="stylesheet" href="/styles.css?v=18">
 </head>
 <body>
   <div class="topbar">
@@ -276,6 +276,14 @@
           <div id="editorColorPhotos" class="editor-colors"></div>
           <p class="muted" style="margin:6px 0 0;font-size:12px;">Elegí un color y subí una imagen JPG, PNG o WEBP (máx. 6 MB).</p>
         </div>
+        <div class="field col-local-only" id="editorStockField">
+          <label>Stock por talle y color</label>
+          <div id="editorStockWrap" class="editor-stock-wrap"></div>
+          <p class="muted" style="margin:6px 0 0;font-size:12px;">Vacío = sin límite. 0 = sin stock. Solo aplica al catálogo de Argentina.</p>
+        </div>
+        <label class="label-check col-local-only" id="editorPublishedWrap">
+          <input id="editorPublished" type="checkbox"> Visible en el catálogo
+        </label>
         <div class="field">
           <label for="editorBadge">Etiqueta</label>
           <select id="editorBadge"></select>
@@ -294,7 +302,7 @@
     </aside>
   </div>
 
-  <script src="/js/common.js?v=5"></script>
-  <script src="/js/admin.js?v=10"></script>
+  <script src="/js/common.js?v=6"></script>
+  <script src="/js/admin.js?v=11"></script>
 </body>
 </html>
