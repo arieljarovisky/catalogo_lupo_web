@@ -608,6 +608,19 @@ async function init() {
   $('cartItems').addEventListener('click', onCartItemsClick);
   $('cartItems').addEventListener('change', onCartItemsChange);
   $('logoutBtn').addEventListener('click', logout);
+  
+  // Mobile filters toggle
+  const filtersToggle = $('filtersToggle');
+  const filtersPanel = $('filtersPanel');
+  if (filtersToggle && filtersPanel) {
+    filtersToggle.addEventListener('click', () => {
+      const isOpen = !filtersPanel.classList.contains('collapsed');
+      filtersPanel.classList.toggle('collapsed', isOpen);
+      filtersToggle.classList.toggle('open', !isOpen);
+      filtersToggle.setAttribute('aria-expanded', String(!isOpen));
+    });
+  }
+  
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
     if ($('cartDrawer').classList.contains('open')) closeCart();
