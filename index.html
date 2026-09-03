@@ -48,7 +48,10 @@
 
   <main class="wrap">
     <div class="catalog-layout">
-      <aside class="filters" aria-label="Filtros de búsqueda">
+      <button id="filtersToggle" class="filters-toggle" type="button" aria-expanded="false" aria-controls="filtersPanel">
+        Filtros
+      </button>
+      <aside id="filtersPanel" class="filters collapsed" aria-label="Filtros de búsqueda">
         <h2>Filtros</h2>
         <div class="filters-grid">
           <div class="field">
