@@ -138,9 +138,33 @@ window.LupoCommon = (() => {
   function catalogLabel(name) {
     return CATALOG_LABELS[name] || translateText(name);
   }
+  function sizesFrom(value) {
+    const raw = (value || '').toString().trim();
+    if (!raw) return ['Único'];
+    let parts = raw.split(/\s*[•·|]\s*/).map(x => x.trim()).filter(Boolean);
+    if (parts.length === 1 && /[\/,]/.test(parts[0]) && !/\d/.test(parts[0])) {
+      parts = parts[0].split(/[\/,]/).map(x => x.trim()).filter(Boolean);
+    }
+    return parts.length ? parts : ['Único'];
+  }
+  function stockKey(size, colorCode) {
+    return `${String(size || '').trim()}|${String(colorCode || '').trim()}`;
+  }
+  /** null = sin límite; number >= 0 = stock cargado */
+  function stockQty(stock, size, colorCode) {
+    if (!stock || typeof stock !== 'object') return null;
+    const key = stockKey(size, colorCode);
+    if (!Object.prototype.hasOwnProperty.call(stock, key)) return null;
+    const n = Number(stock[key]);
+    return Number.isFinite(n) ? Math.max(0, Math.round(n)) : null;
+  }
   async function logout() {
     try { await api('/api/logout', { method: 'POST' }); } catch {}
     window.location.href = '/login';
   }
-  return { escapeHtml, translateText, normalizeText, formatArs, formatFob, parseArs, api, logout, catalogLabel, PRODUCT_BADGES, setCustomLabels, getCustomLabels, badgeInfo, badgeLabel, badgeStyle, isPromoLabel };
+  return {
+    escapeHtml, translateText, normalizeText, formatArs, formatFob, parseArs, api, logout,
+    catalogLabel, sizesFrom, stockKey, stockQty,
+    PRODUCT_BADGES, setCustomLabels, getCustomLabels, badgeInfo, badgeLabel, badgeStyle, isPromoLabel
+  };
 })();

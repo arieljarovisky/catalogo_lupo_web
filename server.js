@@ -326,6 +326,41 @@ function getMeta(id) {
   return db.productMeta[id] || {};
 }
 
+function sizesFromValue(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return ['Único'];
+  let parts = raw.split(/\s*[•·|]\s*/).map(x => x.trim()).filter(Boolean);
+  if (parts.length === 1 && /[\/,]/.test(parts[0]) && !/\d/.test(parts[0])) {
+    parts = parts[0].split(/[\/,]/).map(x => x.trim()).filter(Boolean);
+  }
+  return parts.length ? parts : ['Único'];
+}
+
+function stockKey(size, colorCode) {
+  return `${String(size || '').trim()}|${String(colorCode || '').trim()}`;
+}
+
+function parseStockMap(raw, product) {
+  if (raw == null) return undefined;
+  if (typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const sizes = new Set(sizesFromValue(product?.sizes));
+  const colors = (product?.colors || []).map(c => String(c.code || '').trim()).filter(Boolean);
+  const colorSet = new Set(colors.length ? colors : ['-']);
+  const cleaned = {};
+  for (const [key, value] of Object.entries(raw)) {
+    const parts = String(key).split('|');
+    if (parts.length < 2) continue;
+    const size = parts[0].trim();
+    const colorCode = parts.slice(1).join('|').trim();
+    if (!sizes.has(size) || !colorSet.has(colorCode)) continue;
+    if (value === '' || value == null) continue;
+    const n = Number(value);
+    if (!Number.isFinite(n)) continue;
+    cleaned[stockKey(size, colorCode)] = Math.max(0, Math.min(999999, Math.round(n)));
+  }
+  return cleaned;
+}
+
 function setMeta(id, patch) {
   if (!db.productMeta) db.productMeta = {};
   const current = { ...(db.productMeta[id] || {}), ...patch };
@@ -343,6 +378,18 @@ function setMeta(id, patch) {
     else delete current.colorImages;
   } else {
     delete current.colorImages;
+  }
+  if (current.stock && typeof current.stock === 'object' && !Array.isArray(current.stock)) {
+    const cleaned = {};
+    for (const [key, value] of Object.entries(current.stock)) {
+      const n = Number(value);
+      if (!Number.isFinite(n)) continue;
+      cleaned[String(key)] = Math.max(0, Math.min(999999, Math.round(n)));
+    }
+    if (Object.keys(cleaned).length) current.stock = cleaned;
+    else delete current.stock;
+  } else {
+    delete current.stock;
   }
   if (!Object.keys(current).length) delete db.productMeta[id];
   else db.productMeta[id] = current;
@@ -510,6 +557,8 @@ function productAdminView(p) {
     originalImage: p.image,
     hasCustomImage: Boolean(meta.image),
     colors: resolvedColors(p),
+    sizes: p.sizes || '',
+    stock: meta.stock && typeof meta.stock === 'object' ? meta.stock : {},
     badge: meta.badge || '',
     badgeText: meta.badgeText || '',
     sortOrder: Number.isFinite(meta.sortOrder) ? meta.sortOrder : null,
@@ -555,6 +604,7 @@ function catalogProduct(p, priceArs, { includeFob = false } = {}) {
     hasCustomImage: Boolean(meta.image),
     colors: resolvedColors(p).map(({ code, name, image, hasCustomImage }) => ({ code, name, image, hasCustomImage })),
     sizes: p.sizes || '',
+    stock: meta.stock && typeof meta.stock === 'object' ? meta.stock : {},
     description: p.description || '',
     tech: p.tech || [],
     badge: meta.badge || '',
@@ -1195,7 +1245,19 @@ app.patch('/api/admin/products/:id', requireAdmin, async (req, res) => {
     if (sortOrder === undefined) return res.status(400).json({ error: 'Orden inválido' });
     patch.sortOrder = sortOrder == null ? null : sortOrder;
   }
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, 'stock')) {
+    const stock = parseStockMap(req.body.stock, p);
+    if (stock === null) return res.status(400).json({ error: 'Stock inválido' });
+    if (stock !== undefined) patch.stock = stock;
+  }
   setMeta(p.id, patch);
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, 'published') && isLocalProduct(p)) {
+    const published = Boolean(req.body.published);
+    const current = new Set(db.publishedIds);
+    if (published) current.add(p.id);
+    else current.delete(p.id);
+    db.publishedIds = PRODUCTS.map(item => item.id).filter(id => current.has(id));
+  }
   await saveDb(db);
   res.json({ product: productAdminView(p) });
 });
