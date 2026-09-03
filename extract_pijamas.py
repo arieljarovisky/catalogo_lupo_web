@@ -280,28 +280,14 @@ def extract_catalog(cfg):
             }
             by_code[code] = product
             order.append(code)
-            # attach color swatch images from this page
-            swatches = color_swatch_clips(page)
-            for idx, color in enumerate(product["colors"]):
-                if idx >= len(swatches):
-                    break
-                rel = os.path.join(OUT_COLORS, f"{product['id']}-{idx + 1:02d}.jpg")
-                render(page, rel, clip=swatches[idx], zoom=3.0)
-                color["image"] = rel.replace("\\", "/")
+            # No adjuntar swatches de color como foto del producto:
+            # son chips sólidos y se ven mal en el modal.
         elif code in by_code:
             # continuation page: merge new colors
             existing = {c["code"] for c in by_code[code]["colors"]}
             new_colors = [c for c in colors if c["code"] not in existing]
             if new_colors:
-                start = len(by_code[code]["colors"])
                 by_code[code]["colors"].extend(new_colors)
-                swatches = color_swatch_clips(page)
-                for j, color in enumerate(new_colors):
-                    if j >= len(swatches):
-                        break
-                    rel = os.path.join(OUT_COLORS, f"{by_code[code]['id']}-{start + j + 1:02d}.jpg")
-                    render(page, rel, clip=swatches[j], zoom=3.0)
-                    color["image"] = rel.replace("\\", "/")
             if not by_code[code].get("description"):
                 by_code[code]["description"] = description_in(text)
 

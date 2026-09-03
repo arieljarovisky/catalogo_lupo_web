@@ -79,6 +79,16 @@ function assetUrl(src) {
 function colorPhoto(c) {
   return assetUrl(c && c.image);
 }
+/** Foto de color apta para el modal (no chips/swatches chicos del PDF). */
+function colorMainPhoto(c) {
+  if (!c) return '';
+  if (c.hasCustomImage) return colorPhoto(c);
+  const img = String(c.image || '');
+  if (!img) return '';
+  // Chips de color extraídos del PDF de pijamas (~cuadrados chicos).
+  if (/\/colors\/lupo-pijamas-/i.test(img)) return '';
+  return colorPhoto(c);
+}
 function isAdmin() {
   return currentUser?.role === 'admin';
 }
@@ -133,11 +143,11 @@ function applyProductUpdate(updated) {
     modalProduct = products[idx];
     const code = selectedColorCode();
     const color = code ? modalProduct.colors.find(c => String(c.code) === code) : null;
-    $('modalImage').src = colorPhoto(color) || productImage(modalProduct);
+    $('modalImage').src = colorMainPhoto(color) || productImage(modalProduct);
     $('cartColorChips').querySelectorAll('.choice-chip').forEach(btn => {
       if (btn.dataset.color === SURTIDO_COLOR) return;
       const match = modalProduct.colors.find(c => String(c.code) === btn.dataset.color);
-      if (match) btn.dataset.image = colorPhoto(match) || '';
+      if (match) btn.dataset.image = colorMainPhoto(match) || '';
     });
     syncModalPhotoEdit();
   }
@@ -746,7 +756,7 @@ function fillCartForm(p) {
       const base = colorLabel(c);
       const dup = nameCounts[normalizeText(base)] > 1;
       const label = escapeHtml(dup ? `${base} · ${c.code}` : base);
-      const src = colorPhoto(c) || '';
+      const src = colorMainPhoto(c) || '';
       return `<button type="button" class="choice-chip" data-color="${escapeHtml(c.code)}" data-name="${escapeHtml(translateText(c.name))}" data-image="${escapeHtml(src)}"><span>${label}</span></button>`;
     }),
     `<button type="button" class="choice-chip" data-color="${escapeHtml(SURTIDO_COLOR)}" data-name="Surtido" data-image=""><span>Surtido</span></button>`
@@ -885,7 +895,7 @@ function selectColor(code, name) {
     } else {
       const fromProduct = (modalProduct.colors || []).find(c => String(c.code) === String(code));
       const chip = [...$('cartColorChips').querySelectorAll('.choice-chip')].find(btn => btn.classList.contains('active'));
-      const src = colorPhoto(fromProduct) || (chip && chip.dataset.image) || productImage(modalProduct);
+      const src = colorMainPhoto(fromProduct) || (chip && chip.dataset.image) || productImage(modalProduct);
       $('modalImage').src = src;
     }
   }
