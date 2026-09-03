@@ -398,6 +398,7 @@ a.btn[hidden] {
   background: rgba(255, 255, 255, .92);
   box-shadow: 0 8px 24px rgba(0, 0, 0, .12);
 }
+.modal-photo-edit[hidden] { display: none !important; }
 .modal-photo-edit .btn { min-height: 40px; padding: 8px 12px; font-size: 13px; }
 .modal-photo-hint {
   margin: 0;
@@ -939,13 +940,37 @@ body.brasil-mode .topbar span:nth-child(2) { font-weight: 800; }
   opacity: .45;
   text-decoration: line-through;
 }
+.choice-chip .chip-stock {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  opacity: .75;
+  margin-top: 2px;
+}
+.choice-chip.active .chip-stock { opacity: .95; }
 .stock-hint {
   margin: 8px 0 0;
   font-size: 13px;
   color: var(--muted);
 }
 .stock-hint.warn { color: #a34b00; font-weight: 700; }
-.stock-hint.ok { color: #1b6b3a; }
+.stock-hint.ok { color: #1b6b3a; font-weight: 700; }
+.product-stock-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #eef6f0;
+  color: #1b6b3a;
+  font-size: 12px;
+  font-weight: 700;
+}
+.product-stock-pill.out {
+  background: #f7efe8;
+  color: #a34b00;
+}
 .editor-color-upload {
   cursor: pointer;
   display: inline-flex;

@@ -92,9 +92,11 @@ function syncModalPhotoEdit() {
   if (!wrap) return;
   if (!isAdmin() || !modalProduct) {
     wrap.hidden = true;
+    wrap.style.display = 'none';
     return;
   }
   wrap.hidden = false;
+  wrap.style.display = '';
   const code = selectedColorCode();
   const color = code ? (modalProduct.colors || []).find(c => String(c.code) === code) : null;
   const hint = $('modalPhotoHint');
@@ -459,6 +461,10 @@ async function init() {
   if ($('adminLink')) $('adminLink').hidden = !admin;
   if ($('brasilLink')) $('brasilLink').hidden = true;
   if ($('mayoristaLink')) $('mayoristaLink').hidden = true;
+  if ($('modalPhotoEdit')) {
+    $('modalPhotoEdit').hidden = !admin;
+    if (!admin) $('modalPhotoEdit').style.display = 'none';
+  }
 
   if (brasilMode) {
     if (!admin) {
@@ -688,14 +694,31 @@ function render() {
   grid.innerHTML = data.map(card).join('');
   grid.querySelectorAll('[data-open]').forEach(btn => btn.addEventListener('click', () => openModal(btn.dataset.open)));
 }
+function productStockMap(p) {
+  return (!brasilMode && p?.stock && typeof p.stock === 'object') ? p.stock : null;
+}
+function productStockTotal(p) {
+  const stock = productStockMap(p);
+  if (!stock) return null;
+  const values = Object.values(stock).map(Number).filter(Number.isFinite);
+  if (!values.length) return null;
+  return values.reduce((a, b) => a + Math.max(0, b), 0);
+}
 function card(p) {
   const priced = hasCatalogPrice(p);
   const title = productDisplayName(p);
+  const totalStock = productStockTotal(p);
+  const stockHtml = totalStock == null
+    ? ''
+    : totalStock > 0
+      ? `<div class="product-stock-pill">${totalStock} u. en stock</div>`
+      : `<div class="product-stock-pill out">Sin stock</div>`;
   return `<article class="product">
     <div class="thumb"><img loading="lazy" src="${productImage(p)}" alt="${escapeHtml(title)}"><span class="badge">${escapeHtml(p.code)}</span>${offerTagHtml(p)}</div>
     <div class="info">
       <h4>${escapeHtml(title)}</h4>
       <div class="price ${priced ? '' : 'muted'}">${escapeHtml(formatCatalogPrice(p))}</div>
+      ${stockHtml}
       <div class="meta"><span class="pill">${escapeHtml(catalogLabel(p.catalog))}</span><span class="pill">${escapeHtml(translateText(p.category))}</span></div>
       <p class="desc">${escapeHtml(translateText(p.description || 'Sin descripción cargada.'))}</p>
       <div class="card-actions">
@@ -715,8 +738,8 @@ function fillCartForm(p) {
     return acc;
   }, {});
   $('cartSizeChips').innerHTML = [
-    ...sizes.map(s => `<button type="button" class="choice-chip" data-size="${escapeHtml(s)}">${escapeHtml(s)}</button>`),
-    `<button type="button" class="choice-chip" data-size="${escapeHtml(SURTIDO_SIZE)}">${escapeHtml(SURTIDO_SIZE)}</button>`
+    ...sizes.map(s => `<button type="button" class="choice-chip" data-size="${escapeHtml(s)}"><span>${escapeHtml(s)}</span></button>`),
+    `<button type="button" class="choice-chip" data-size="${escapeHtml(SURTIDO_SIZE)}"><span>${escapeHtml(SURTIDO_SIZE)}</span></button>`
   ].join('');
   $('cartColorChips').innerHTML = [
     ...colors.map(c => {
@@ -724,9 +747,9 @@ function fillCartForm(p) {
       const dup = nameCounts[normalizeText(base)] > 1;
       const label = escapeHtml(dup ? `${base} · ${c.code}` : base);
       const src = colorPhoto(c) || '';
-      return `<button type="button" class="choice-chip" data-color="${escapeHtml(c.code)}" data-name="${escapeHtml(translateText(c.name))}" data-image="${escapeHtml(src)}">${label}</button>`;
+      return `<button type="button" class="choice-chip" data-color="${escapeHtml(c.code)}" data-name="${escapeHtml(translateText(c.name))}" data-image="${escapeHtml(src)}"><span>${label}</span></button>`;
     }),
-    `<button type="button" class="choice-chip" data-color="${escapeHtml(SURTIDO_COLOR)}" data-name="Surtido" data-image="">Surtido</button>`
+    `<button type="button" class="choice-chip" data-color="${escapeHtml(SURTIDO_COLOR)}" data-name="Surtido" data-image=""><span>Surtido</span></button>`
   ].join('');
   $('cartQty').value = 1;
   $('cartQty').removeAttribute('max');
@@ -747,15 +770,80 @@ function selectedVariantStock() {
   return stockQty(p.stock, size, colorCode);
 }
 
+function syncChipStockLabels() {
+  const p = modalProduct;
+  const stock = productStockMap(p);
+  const size = $('cartSize')?.value || '';
+  const colorCode = $('cartColor')?.value || '';
+
+  $('cartSizeChips')?.querySelectorAll('.choice-chip').forEach(btn => {
+    const label = btn.querySelector('span') || btn;
+    const s = btn.dataset.size || '';
+    btn.classList.remove('is-oos');
+    const old = btn.querySelector('.chip-stock');
+    if (old) old.remove();
+    if (!stock || !colorCode || colorCode === SURTIDO_COLOR || s === SURTIDO_SIZE) return;
+    const qty = stockQty(stock, s, colorCode);
+    if (qty == null) return;
+    const el = document.createElement('span');
+    el.className = 'chip-stock';
+    el.textContent = qty > 0 ? `${qty} u.` : 'Agotado';
+    btn.appendChild(el);
+    if (qty <= 0) btn.classList.add('is-oos');
+  });
+
+  $('cartColorChips')?.querySelectorAll('.choice-chip').forEach(btn => {
+    btn.classList.remove('is-oos');
+    const old = btn.querySelector('.chip-stock');
+    if (old) old.remove();
+    const code = btn.dataset.color || '';
+    if (!stock || !size || size === SURTIDO_SIZE || code === SURTIDO_COLOR) return;
+    const qty = stockQty(stock, size, code);
+    if (qty == null) return;
+    const el = document.createElement('span');
+    el.className = 'chip-stock';
+    el.textContent = qty > 0 ? `${qty} u.` : 'Agotado';
+    btn.appendChild(el);
+    if (qty <= 0) btn.classList.add('is-oos');
+  });
+}
+
 function syncStockHint() {
   const hint = $('cartStockHint');
   const addBtn = document.querySelector('#addToCartForm button[type="submit"]');
   if (!hint) return;
+  syncChipStockLabels();
+  const p = modalProduct;
+  const stock = productStockMap(p);
+  const size = $('cartSize')?.value || '';
+  const colorCode = $('cartColor')?.value || '';
   const available = selectedVariantStock();
-  if (available == null) {
+
+  if (!stock) {
     hint.hidden = true;
     hint.textContent = '';
     hint.className = 'stock-hint';
+    $('cartQty')?.removeAttribute('max');
+    if (addBtn) addBtn.disabled = false;
+    return;
+  }
+
+  if (!size || !colorCode || size === SURTIDO_SIZE || colorCode === SURTIDO_COLOR) {
+    const total = productStockTotal(p);
+    hint.hidden = false;
+    hint.className = 'stock-hint';
+    hint.textContent = total == null
+      ? 'Elegí talle y color para ver el stock'
+      : `Stock total: ${total} u. · Elegí talle y color`;
+    $('cartQty')?.removeAttribute('max');
+    if (addBtn) addBtn.disabled = false;
+    return;
+  }
+
+  if (available == null) {
+    hint.hidden = false;
+    hint.className = 'stock-hint';
+    hint.textContent = 'Sin límite de stock para esta combinación';
     $('cartQty')?.removeAttribute('max');
     if (addBtn) addBtn.disabled = false;
     return;
