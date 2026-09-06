@@ -654,15 +654,22 @@ function setView(view) {
   $('listBtn').classList.toggle('btn-black', view === 'list');
   $('listBtn').classList.toggle('btn-ghost', view !== 'list');
 }
+function matchesLooseCode(query, code) {
+  const q = normalizeCodeKey(query);
+  const c = normalizeCodeKey(code);
+  return Boolean(q && c && (c.includes(q) || q.includes(c)));
+}
 function filtered() {
   const q = normalizeText(state.search);
+  const qCompact = q.replace(/[^a-z0-9]/g, '');
   const wantedCodes = getCodes(state.codes);
   const wantedColor = normalizeText(state.color);
   return products.filter(p => {
     const translatedBlob = translateText([p.code, p.name, p.category, p.catalog, p.sizes, p.description, ...(p.tech || []), (p.colors || []).map(c => `${c.code} ${c.name}`).join(' ')].join(' '));
     const blob = normalizeText([translatedBlob, p.code, p.name, p.category, p.catalog, p.sizes, p.description, ...(p.tech || []), (p.colors || []).map(c => `${c.code} ${c.name}`).join(' ')].join(' '));
-    if (q && !blob.includes(q)) return false;
-    if (wantedCodes.length && !wantedCodes.some(c => normalizeText(p.code).includes(c))) return false;
+    const colorCodes = (p.colors || []).map(c => c.code);
+    if (q && !blob.includes(q) && !matchesLooseCode(qCompact, p.code) && !colorCodes.some(c => matchesLooseCode(qCompact, c))) return false;
+    if (wantedCodes.length && !wantedCodes.some(c => matchesLooseCode(c, p.code))) return false;
     if (state.promos) {
       if (!p.badge || !isPromoLabel(p.badge)) return false;
     } else if (state.catalog && p.catalog !== state.catalog) return false;
