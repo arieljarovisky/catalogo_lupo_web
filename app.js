@@ -13,7 +13,12 @@ const brasilMode = (() => {
   if (path === '/brasil') return true;
   return new URLSearchParams(location.search).get('pedido') === 'brasil';
 })();
+const PAGE_SIZE = 36;
+const productIndex = new Map();
 let products = [];
+let filteredCache = [];
+let filteredCacheKey = null;
+let visibleCount = PAGE_SIZE;
 let currentUser = null;
 let cart = [];
 let cartNotes = '';
@@ -119,6 +124,31 @@ function syncModalPhotoEdit() {
     restore.hidden = !modalProduct.hasCustomImage;
   }
 }
+function indexProduct(p) {
+  if (!p?.id) return;
+  const colorText = (p.colors || []).map(c => `${c.code || ''} ${c.name || ''} ${colorLabel(c)}`).join(' ');
+  const raw = [p.code, p.name, p.category, p.catalog, p.sizes, p.description, ...(p.tech || []), colorText].join(' ');
+  productIndex.set(p.id, {
+    search: normalizeText(`${translateText(raw)} ${raw}`),
+    displayName: productDisplayName(p),
+    desc: translateText(p.description || 'Sin descripción cargada.'),
+    categoryLabel: translateText(p.category),
+    codeKey: normalizeCodeKey(p.code),
+    colorKeys: (p.colors || []).map(c => normalizeText(colorLabel(c))),
+    sizeKey: normalizeText(p.sizes)
+  });
+}
+function indexProducts() {
+  productIndex.clear();
+  products.forEach(indexProduct);
+  invalidateFilterCache();
+}
+function invalidateFilterCache() {
+  filteredCacheKey = null;
+}
+function filterStateKey() {
+  return [state.search, state.codes, state.catalog, state.category, state.size, state.color, state.badge, state.promos ? '1' : '0'].join('\0');
+}
 function applyProductUpdate(updated) {
   if (!updated?.id) return;
   const idx = products.findIndex(p => p.id === updated.id);
@@ -139,6 +169,8 @@ function applyProductUpdate(updated) {
     badgeText: updated.badgeText != null ? updated.badgeText : prev.badgeText,
     stock: updated.stock != null ? updated.stock : prev.stock
   };
+  indexProduct(products[idx]);
+  invalidateFilterCache();
   if (modalProduct?.id === updated.id) {
     modalProduct = products[idx];
     const code = selectedColorCode();
@@ -501,6 +533,7 @@ async function init() {
     ? await api('/api/admin/catalog-brasil')
     : await api('/api/catalog');
   products = catalog.products || [];
+  indexProducts();
   setCustomLabels(catalog.labels || []);
   cart = loadCart();
   cartNotes = loadNotes();
@@ -525,14 +558,27 @@ async function init() {
     syncState();
     render();
   });
+  const applyFilters = () => {
+    syncState();
+    render();
+  };
+  const applyFiltersSoon = debounce(applyFilters, 160);
   ['search', 'codes', 'catalogFilter', 'categoryFilter', 'sizeFilter', 'colorFilter', 'badgeFilter'].forEach(id => {
     $(id).addEventListener('input', () => {
       if (id === 'catalogFilter') state.promos = false;
-      syncState();
-      if (id === 'catalogFilter') setActiveCatalog(state.catalog);
-      render();
+      if (id === 'catalogFilter') {
+        syncState();
+        setActiveCatalog(state.catalog);
+      }
+      if (id === 'search' || id === 'codes') applyFiltersSoon();
+      else applyFilters();
     });
   });
+  $('grid').addEventListener('click', e => {
+    const btn = e.target.closest('[data-open]');
+    if (btn) openModal(btn.dataset.open);
+  });
+  bindInfiniteScroll();
   $('offerCards').addEventListener('click', e => {
     const btn = e.target.closest('[data-offer]');
     if (!btn) return;
@@ -626,7 +672,45 @@ async function init() {
     if ($('cartDrawer').classList.contains('open')) closeCart();
     else closeModal();
   });
+  setCatalogStatus('');
   render();
+}
+
+function debounce(fn, ms) {
+  let timer = null;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), ms);
+  };
+}
+function setCatalogStatus(text) {
+  const el = $('catalogStatus');
+  if (!el) return;
+  el.hidden = !text;
+  el.textContent = text || '';
+}
+function bindInfiniteScroll() {
+  const sentinel = $('gridSentinel');
+  if (!sentinel) return;
+  sentinel.addEventListener('click', appendMoreProducts);
+  if (typeof IntersectionObserver !== 'function') return;
+  const io = new IntersectionObserver(entries => {
+    if (!entries.some(entry => entry.isIntersecting)) return;
+    appendMoreProducts();
+  }, { rootMargin: '800px 0px' });
+  io.observe(sentinel);
+}
+function appendMoreProducts() {
+  const data = filtered();
+  if (visibleCount >= data.length) return;
+  const from = visibleCount;
+  visibleCount = Math.min(data.length, visibleCount + PAGE_SIZE);
+  $('grid').insertAdjacentHTML('beforeend', data.slice(from, visibleCount).map(card).join(''));
+  syncSentinel(data.length);
+}
+function syncSentinel(total) {
+  const sentinel = $('gridSentinel');
+  if (sentinel) sentinel.hidden = visibleCount >= total;
 }
 
 function syncState() {
@@ -663,13 +747,14 @@ function isCodeQuery(q) {
   const compact = String(q || '').replace(/[^a-z0-9]/g, '');
   return compact.length >= 4 && /^\d+$/.test(compact);
 }
-function filtered() {
+function computeFiltered() {
   const q = normalizeText(state.search);
   const wantedCodes = getCodes(state.codes);
   const wantedColor = normalizeText(state.color);
+  const wantedSize = normalizeText(state.size);
   return products.filter(p => {
-    const translatedBlob = translateText([p.code, p.name, p.category, p.catalog, p.sizes, p.description, ...(p.tech || []), (p.colors || []).map(c => `${c.code} ${c.name}`).join(' ')].join(' '));
-    const blob = normalizeText([translatedBlob, p.code, p.name, p.category, p.catalog, p.sizes, p.description, ...(p.tech || []), (p.colors || []).map(c => `${c.code} ${c.name}`).join(' ')].join(' '));
+    const idx = productIndex.get(p.id);
+    const blob = idx?.search || '';
     if (q) {
       const codeHit = matchesProductCode(q, p.code);
       if (isCodeQuery(q) ? !codeHit : (!blob.includes(q) && !codeHit)) return false;
@@ -679,8 +764,8 @@ function filtered() {
       if (!p.badge || !isPromoLabel(p.badge)) return false;
     } else if (state.catalog && p.catalog !== state.catalog) return false;
     if (state.category && p.category !== state.category) return false;
-    if (state.size && !normalizeText(p.sizes).includes(normalizeText(state.size))) return false;
-    if (state.color && !(p.colors || []).some(c => normalizeText(colorLabel(c)).includes(wantedColor))) return false;
+    if (wantedSize && !(idx?.sizeKey || normalizeText(p.sizes)).includes(wantedSize)) return false;
+    if (wantedColor && !(idx?.colorKeys || []).some(label => label.includes(wantedColor))) return false;
     if (state.badge && p.badge !== state.badge) return false;
     return true;
   }).sort((a, b) => {
@@ -695,6 +780,15 @@ function filtered() {
     if (aw !== bw) return aw - bw;
     return a.code.localeCompare(b.code, undefined, { numeric: true });
   });
+}
+function filtered() {
+  const key = filterStateKey();
+  if (key !== filteredCacheKey) {
+    filteredCacheKey = key;
+    filteredCache = computeFiltered();
+    visibleCount = PAGE_SIZE;
+  }
+  return filteredCache;
 }
 function offerTagHtml(p) {
   if (!p.badge) return '';
@@ -726,8 +820,8 @@ function render() {
   $('resultCount').textContent = data.length;
   $('empty').style.display = data.length ? 'none' : 'block';
   const grid = $('grid');
-  grid.innerHTML = data.map(card).join('');
-  grid.querySelectorAll('[data-open]').forEach(btn => btn.addEventListener('click', () => openModal(btn.dataset.open)));
+  grid.innerHTML = data.slice(0, visibleCount).map(card).join('');
+  syncSentinel(data.length);
 }
 function productStockMap(p) {
   return (!brasilMode && p?.stock && typeof p.stock === 'object') ? p.stock : null;
@@ -741,7 +835,8 @@ function productStockTotal(p) {
 }
 function card(p) {
   const priced = hasCatalogPrice(p);
-  const title = productDisplayName(p);
+  const idx = productIndex.get(p.id);
+  const title = idx?.displayName || productDisplayName(p);
   const totalStock = productStockTotal(p);
   const stockHtml = totalStock == null
     ? ''
@@ -749,13 +844,13 @@ function card(p) {
       ? `<div class="product-stock-pill">${totalStock} u. en stock</div>`
       : `<div class="product-stock-pill out">Sin stock</div>`;
   return `<article class="product">
-    <div class="thumb"><img loading="lazy" src="${productImage(p)}" alt="${escapeHtml(title)}"><span class="badge">${escapeHtml(p.code)}</span>${offerTagHtml(p)}</div>
+    <div class="thumb"><img loading="lazy" decoding="async" src="${productImage(p)}" alt="${escapeHtml(title)}"><span class="badge">${escapeHtml(p.code)}</span>${offerTagHtml(p)}</div>
     <div class="info">
       <h4>${escapeHtml(title)}</h4>
       <div class="price ${priced ? '' : 'muted'}">${escapeHtml(formatCatalogPrice(p))}</div>
       ${stockHtml}
-      <div class="meta"><span class="pill">${escapeHtml(catalogLabel(p.catalog))}</span><span class="pill">${escapeHtml(translateText(p.category))}</span></div>
-      <p class="desc">${escapeHtml(translateText(p.description || 'Sin descripción cargada.'))}</p>
+      <div class="meta"><span class="pill">${escapeHtml(catalogLabel(p.catalog))}</span><span class="pill">${escapeHtml(idx?.categoryLabel || translateText(p.category))}</span></div>
+      <p class="desc">${escapeHtml(idx?.desc || translateText(p.description || 'Sin descripción cargada.'))}</p>
       <div class="card-actions">
         <button class="btn btn-black" data-open="${p.id}">Pedir</button>
       </div>

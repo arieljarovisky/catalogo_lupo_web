@@ -29,10 +29,16 @@ window.LupoCommon = (() => {
   function escapeRegExp(s) {
     return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
+  const TRANSLATION_RULES = TRANSLATIONS.map(([from, to]) => ({
+    re: new RegExp(escapeRegExp(from), 'gi'),
+    to
+  }));
   function translateText(value) {
     let text = (value || '').toString();
-    for (const [from, to] of TRANSLATIONS) {
-      text = text.replace(new RegExp(escapeRegExp(from), 'gi'), to);
+    if (!text) return text;
+    for (const rule of TRANSLATION_RULES) {
+      rule.re.lastIndex = 0;
+      text = text.replace(rule.re, rule.to);
     }
     return text;
   }

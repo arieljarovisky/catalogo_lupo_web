@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=19">
+  <link rel="stylesheet" href="/styles.css?v=20">
 </head>
 <body>
   <div class="topbar">
@@ -97,11 +97,13 @@
           </div>
         </div>
         <div id="offerCards" class="offer-cards" hidden></div>
+        <p id="catalogStatus" class="catalog-status">Cargando catálogo…</p>
         <section id="empty" class="empty">
           <h3>No encontramos productos con esos filtros.</h3>
           <p>Probá buscar solo los primeros números del código o limpiar algún filtro.</p>
         </section>
         <section id="grid" class="grid"></section>
+        <button id="gridSentinel" class="btn btn-ghost grid-sentinel" type="button" hidden>Ver más productos</button>
         <p class="footer-note">Catálogo armado con tus PDF de Boxers y slips, Lencería y Medias 2026.</p>
       </section>
     </div>
@@ -198,7 +200,7 @@
     <button id="dockSendBtn" class="btn btn-red" type="button">Enviar</button>
   </div>
 
-  <script src="/js/common.js?v=6"></script>
-  <script src="/app.js?v=23"></script>
+  <script src="/js/common.js?v=7"></script>
+  <script src="/app.js?v=24"></script>
 </body>
 </html>

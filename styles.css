@@ -242,7 +242,19 @@ a.btn[hidden] {
   display: flex;
   flex-direction: column;
   background: #fff;
+  content-visibility: auto;
+  contain-intrinsic-size: 0 420px;
 }
+.catalog-status {
+  margin: 0 0 16px;
+  color: var(--muted);
+  font-size: 14px;
+}
+.grid-sentinel {
+  width: 100%;
+  margin: 18px 0 8px;
+}
+.grid-sentinel[hidden] { display: none !important; }
 .thumb {
   aspect-ratio: 1;
   background: #f3f3f3;
@@ -367,7 +379,7 @@ a.btn[hidden] {
   border-radius: var(--radius);
 }
 .list .grid { grid-template-columns: 1fr; }
-.list .product { display: grid; grid-template-columns: 180px 1fr; gap: 16px; border-bottom: 1px solid var(--line); padding-bottom: 16px; }
+.list .product { display: grid; grid-template-columns: 180px 1fr; gap: 16px; border-bottom: 1px solid var(--line); padding-bottom: 16px; contain-intrinsic-size: 0 200px; }
 .list .thumb { width: 180px; }
 .list .info h4 { min-height: 0; }
 .footer-note { color: var(--muted); font-size: 12px; margin-top: 28px; }

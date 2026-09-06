@@ -176,7 +176,7 @@ function renderProducts() {
     return `
     <tr data-product="${escapeHtml(p.id)}">
       <td class="col-local-only"><input type="checkbox" data-id="${escapeHtml(p.id)}" ${p.published ? 'checked' : ''}></td>
-      <td><button class="thumb-edit" type="button" data-edit="${escapeHtml(p.id)}" title="Editar foto"><img class="thumb-mini" src="${escapeHtml(adminImage(p))}" alt=""></button></td>
+      <td><button class="thumb-edit" type="button" data-edit="${escapeHtml(p.id)}" title="Editar foto"><img class="thumb-mini" loading="lazy" decoding="async" src="${escapeHtml(adminImage(p))}" alt=""></button></td>
       <td class="col-local-only"><input class="sort-order-input" type="number" min="0" step="1" inputmode="numeric" data-sort="${escapeHtml(p.id)}" value="${escapeHtml(String(orderVal))}" placeholder="—" title="Menor número = aparece antes"></td>
       <td><b>${escapeHtml(p.code)}</b></td>
       <td>${escapeHtml(translateText(p.name))}</td>

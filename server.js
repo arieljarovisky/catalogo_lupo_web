@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const crypto = require('crypto');
+const zlib = require('zlib');
 const express = require('express');
 const {
   USE_SUPABASE,
@@ -281,7 +282,29 @@ const dbReady = loadDb()
     throw err;
   });
 
+function isStaticAssetPath(urlPath) {
+  return /^\/(assets|js|pdfs|orders)\//.test(urlPath)
+    || urlPath === '/styles.css'
+    || urlPath === '/app.js'
+    || urlPath === '/logo.svg';
+}
+
+function sendGzipJson(req, res, payload) {
+  const json = JSON.stringify(payload);
+  const accept = String(req.headers['accept-encoding'] || '');
+  if (json.length > 1024 && /gzip/i.test(accept)) {
+    const body = zlib.gzipSync(json, { level: 6 });
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Encoding', 'gzip');
+    res.setHeader('Vary', 'Accept-Encoding');
+    return res.send(body);
+  }
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  return res.send(json);
+}
+
 async function ensureDb(req, res, next) {
+  if (isStaticAssetPath(req.path)) return next();
   try {
     await dbReady;
     next();
@@ -835,9 +858,17 @@ function cookieSession(req, res, next) {
   const origJson = res.json.bind(res);
   const origRedirect = res.redirect.bind(res);
   const origSendFile = res.sendFile.bind(res);
-  res.json = (...args) => { writeCookie(); return origJson(...args); };
-  res.redirect = (...args) => { writeCookie(); return origRedirect(...args); };
-  res.sendFile = (...args) => { writeCookie(); return origSendFile(...args); };
+  const origSend = res.send.bind(res);
+  let written = false;
+  const writeOnce = () => {
+    if (written) return;
+    written = true;
+    writeCookie();
+  };
+  res.json = (...args) => { writeOnce(); return origJson(...args); };
+  res.redirect = (...args) => { writeOnce(); return origRedirect(...args); };
+  res.sendFile = (...args) => { writeOnce(); return origSendFile(...args); };
+  res.send = (...args) => { writeOnce(); return origSend(...args); };
   next();
 }
 
@@ -848,14 +879,33 @@ app.use(express.json({ limit: '8mb' }));
 app.use(ensureDb);
 app.use(cookieSession);
 
+const staticImageHeaders = {
+  maxAge: '30d',
+  etag: true,
+  lastModified: true,
+  setHeaders(res, filePath) {
+    if (/\.(jpe?g|png|webp|gif|svg)$/i.test(filePath)) {
+      res.setHeader('Cache-Control', 'public, max-age=2592000, stale-while-revalidate=86400');
+    }
+  }
+};
 app.use('/orders', express.static(path.join(ROOT, 'orders')));
-app.use('/assets/uploads', express.static(UPLOADS_DIR));
-app.use('/assets', express.static(path.join(ROOT, 'assets')));
-app.use('/pdfs', express.static(path.join(ROOT, 'pdfs')));
-app.use('/js', express.static(path.join(ROOT, 'js')));
-app.get('/styles.css', (req, res) => res.sendFile(path.join(ROOT, 'styles.css')));
-app.get('/app.js', (req, res) => res.sendFile(path.join(ROOT, 'app.js')));
-app.get('/logo.svg', (req, res) => res.sendFile(path.join(ROOT, 'logo.svg')));
+app.use('/assets/uploads', express.static(UPLOADS_DIR, staticImageHeaders));
+app.use('/assets', express.static(path.join(ROOT, 'assets'), staticImageHeaders));
+app.use('/pdfs', express.static(path.join(ROOT, 'pdfs'), { maxAge: '7d' }));
+app.use('/js', express.static(path.join(ROOT, 'js'), { maxAge: '1d' }));
+app.get('/styles.css', (req, res) => {
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.sendFile(path.join(ROOT, 'styles.css'));
+});
+app.get('/app.js', (req, res) => {
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.sendFile(path.join(ROOT, 'app.js'));
+});
+app.get('/logo.svg', (req, res) => {
+  res.setHeader('Cache-Control', 'public, max-age=604800');
+  res.sendFile(path.join(ROOT, 'logo.svg'));
+});
 
 app.get('/login', (req, res) => {
   const user = getSessionUser(req);
@@ -1098,7 +1148,7 @@ app.get('/api/catalog', requireAuth, (req, res) => {
   const items = PRODUCTS
     .filter(p => isLocalProduct(p) && published.has(p.id))
     .map(p => catalogProduct(p, prices[p.id]));
-  res.json({
+  sendGzipJson(req, res, {
     products: items,
     catalogs: catalogSummaries(items),
     labels: db.customLabels || [],
@@ -1108,7 +1158,7 @@ app.get('/api/catalog', requireAuth, (req, res) => {
 
 app.get('/api/admin/catalog-brasil', requireAdmin, (req, res) => {
   const items = PRODUCTS.map(p => catalogProduct(p, null, { includeFob: true }));
-  res.json({
+  sendGzipJson(req, res, {
     products: items,
     catalogs: catalogSummaries(items),
     labels: db.customLabels || [],
@@ -1188,7 +1238,7 @@ app.post('/api/admin/orders-brasil/export', requireAdmin, (req, res) => {
 });
 
 app.get('/api/admin/products', requireAdmin, (req, res) => {
-  res.json({
+  sendGzipJson(req, res, {
     products: PRODUCTS.map(productAdminView)
   });
 });
