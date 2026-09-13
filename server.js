@@ -876,6 +876,19 @@ const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', 1);
 app.use(express.json({ limit: '8mb' }));
+
+app.get('/api/health', async (req, res) => {
+  try {
+    if (!USE_SUPABASE) {
+      return res.json({ ok: true, persistencia: 'local' });
+    }
+    await fetchAppState();
+    return res.json({ ok: true, persistencia: 'supabase' });
+  } catch (err) {
+    return res.status(503).json({ ok: false, error: err.message || 'Supabase no disponible' });
+  }
+});
+
 app.use(ensureDb);
 app.use(cookieSession);
 

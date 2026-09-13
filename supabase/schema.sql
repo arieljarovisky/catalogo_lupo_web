@@ -23,10 +23,7 @@ insert into storage.buckets (id, name, public)
 values ('uploads', 'uploads', true)
 on conflict (id) do update set public = excluded.public;
 
--- Lectura pública de imágenes del catálogo
+-- Bucket público: las fotos se sirven por URL directa.
+-- Sin policy SELECT: nadie puede listar todos los archivos del bucket.
+-- Escritura/borrado solo con service role (bypassa RLS).
 drop policy if exists "Public read uploads" on storage.objects;
-create policy "Public read uploads"
-  on storage.objects for select
-  using (bucket_id = 'uploads');
-
--- Escritura/borrado solo con service role (bypassa RLS). No hace falta policy de insert.
