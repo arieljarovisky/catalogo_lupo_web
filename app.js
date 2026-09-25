@@ -423,6 +423,30 @@ function formatLinePrice(item) {
 function hasCatalogPrice(p) {
   return brasilMode ? Number.isFinite(p.fobUsd) : Number.isFinite(p.priceArs);
 }
+function hasDiscountPrice(p) {
+  return !brasilMode
+    && Number.isFinite(p.priceArs)
+    && Number.isFinite(p.priceArsOriginal)
+    && p.priceArsOriginal > p.priceArs;
+}
+function priceHtml(p) {
+  if (brasilMode) return escapeHtml(formatCatalogPrice(p));
+  if (!Number.isFinite(p.priceArs)) return escapeHtml('Consultar');
+  if (hasDiscountPrice(p)) {
+    return `<span class="price-original">${escapeHtml(formatArs(p.priceArsOriginal))}</span>`
+      + `<span class="price-current">${escapeHtml(formatArs(p.priceArs))}</span>`;
+  }
+  return escapeHtml(formatArs(p.priceArs));
+}
+function linePriceHtml(item) {
+  if (brasilMode) return escapeHtml(formatLinePrice(item));
+  if (!Number.isFinite(item.priceArs)) return escapeHtml('Consultar');
+  if (hasDiscountPrice(item)) {
+    return `<span class="price-original">${escapeHtml(formatArs(item.priceArsOriginal))}</span>`
+      + ` <span class="price-current">${escapeHtml(formatArs(item.priceArs))}</span>`;
+  }
+  return escapeHtml(formatArs(item.priceArs));
+}
 function updateCartBadge() {
   const count = cartTotalQty();
   const badge = $('cartCount');
@@ -493,7 +517,9 @@ async function init() {
     if ($('viewPedidoPageBtn')) $('viewPedidoPageBtn').hidden = false;
     if ($('dockPedidoPageBtn')) $('dockPedidoPageBtn').hidden = false;
   } else {
-    $('userList').textContent = me.priceListName ? `Lista ${me.priceListName}` : 'Sin lista asignada';
+    const discount = Number(me.discountPercent) || Number(me.user?.discountPercent) || 0;
+    const listLabel = me.priceListName ? `Lista ${me.priceListName}` : 'Sin lista asignada';
+    $('userList').textContent = discount > 0 ? `${listLabel} · ${discount}% off` : listLabel;
     if (admin && $('brasilLink')) $('brasilLink').hidden = false;
   }
 
@@ -740,7 +766,7 @@ function card(p) {
     <div class="thumb"><img loading="lazy" src="${productImage(p)}" alt="${escapeHtml(title)}"><span class="badge">${escapeHtml(p.code)}</span>${offerTagHtml(p)}</div>
     <div class="info">
       <h4>${escapeHtml(title)}</h4>
-      <div class="price ${priced ? '' : 'muted'}">${escapeHtml(formatCatalogPrice(p))}</div>
+      <div class="price ${priced ? '' : 'muted'}">${priceHtml(p)}</div>
       ${stockHtml}
       <div class="meta"><span class="pill">${escapeHtml(catalogLabel(p.catalog))}</span><span class="pill">${escapeHtml(translateText(p.category))}</span></div>
       <p class="desc">${escapeHtml(translateText(p.description || 'Sin descripción cargada.'))}</p>
@@ -937,14 +963,14 @@ function openModal(id) {
   }
   $('modalTitle').textContent = productDisplayName(p);
   $('modalCode').textContent = p.code;
-  $('modalPrice').textContent = formatCatalogPrice(p);
+  $('modalPrice').innerHTML = priceHtml(p);
   $('modalPrice').classList.toggle('muted', !hasCatalogPrice(p));
   $('modalDesc').textContent = translateText(p.description || '');
   fillCartForm(p);
   const colorNames = productColorNames(p);
   const priceRowLabel = brasilMode ? 'FOB USD' : 'Precio';
   $('modalMeta').innerHTML = `
-    <tr><td>${priceRowLabel}</td><td>${escapeHtml(formatCatalogPrice(p))}</td></tr>
+    <tr><td>${priceRowLabel}</td><td>${priceHtml(p)}</td></tr>
     <tr><td>Catálogo</td><td>${escapeHtml(catalogLabel(p.catalog))}</td></tr>
     <tr><td>Categoría</td><td>${escapeHtml(translateText(p.category))}</td></tr>
     <tr><td>Talles</td><td>${escapeHtml(p.sizes || 'No detectado')}</td></tr>
@@ -1008,6 +1034,7 @@ function onAddToCart(e) {
       return color?.image || p.image || '';
     })(),
     priceArs: Number.isFinite(p.priceArs) ? p.priceArs : null,
+    priceArsOriginal: Number.isFinite(p.priceArsOriginal) ? p.priceArsOriginal : null,
     fobUsd: Number.isFinite(p.fobUsd) ? p.fobUsd : null,
     qty
   };
@@ -1016,6 +1043,9 @@ function onAddToCart(e) {
   if (existing) {
     existing.qty += qty;
     if (existing.priceArs == null && incoming.priceArs != null) existing.priceArs = incoming.priceArs;
+    if (existing.priceArsOriginal == null && incoming.priceArsOriginal != null) {
+      existing.priceArsOriginal = incoming.priceArsOriginal;
+    }
     if (existing.fobUsd == null && incoming.fobUsd != null) existing.fobUsd = incoming.fobUsd;
   } else {
     cart.push(incoming);
@@ -1057,7 +1087,7 @@ function renderCart() {
         <div class="cart-line-meta">
           <span>Talle: <b>${escapeHtml(item.size)}</b></span>
           <span>Color: <b>${escapeHtml(item.colorName || item.colorCode)}</b></span>
-          <span>${brasilMode ? 'FOB' : 'Precio'}: <b>${escapeHtml(formatLinePrice(item))}</b></span>
+          <span>${brasilMode ? 'FOB' : 'Precio'}: <b>${linePriceHtml(item)}</b></span>
         </div>
       </div>
       <div class="cart-line-actions">

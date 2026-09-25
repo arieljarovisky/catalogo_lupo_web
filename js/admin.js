@@ -411,6 +411,7 @@ function renderUsers() {
           ${lists.map(l => `<option value="${escapeHtml(l.id)}" ${l.id === u.priceListId ? 'selected' : ''}>${escapeHtml(l.name)}</option>`).join('')}
         </select>
       </td>
+      <td><input type="number" min="0" max="100" step="0.01" data-discount value="${Number(u.discountPercent) || 0}" style="width:72px"></td>
       <td><input type="password" data-pass placeholder="Opcional"></td>
       <td>
         <button class="btn btn-ghost" data-save-user type="button">Guardar</button>
@@ -759,10 +760,12 @@ async function init() {
           username: $('userUsername').value,
           password: $('userPassword').value,
           role: $('userRole').value,
-          priceListId: $('userList').value
+          priceListId: $('userList').value,
+          discountPercent: $('userDiscount').value
         }
       });
       $('userForm').reset();
+      if ($('userDiscount')) $('userDiscount').value = '0';
       await refreshUsers();
       showFlash('Usuario creado.');
     } catch (err) { showFlash(err.message, true); }
@@ -776,7 +779,8 @@ async function init() {
         const body = {
           name: row.querySelector('[data-name]').value,
           role: row.querySelector('[data-role]').value,
-          priceListId: row.querySelector('[data-user-list]').value
+          priceListId: row.querySelector('[data-user-list]').value,
+          discountPercent: row.querySelector('[data-discount]').value
         };
         const pass = row.querySelector('[data-pass]').value;
         if (pass) body.password = pass;

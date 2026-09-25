@@ -83,6 +83,32 @@ function uid() {
   return crypto.randomBytes(8).toString('hex');
 }
 
+function parseDiscountPercent(raw) {
+  if (raw == null || String(raw).trim() === '') return 0;
+  const n = Number(String(raw).trim().replace(',', '.'));
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.min(100, Math.round(n * 100) / 100);
+}
+
+function roundMoney(n) {
+  return Math.round(n * 100) / 100;
+}
+
+function applyDiscount(listPrice, discountPercent) {
+  const pct = parseDiscountPercent(discountPercent);
+  if (!Number.isFinite(listPrice)) {
+    return { priceArs: null, priceArsOriginal: null, discountPercent: pct };
+  }
+  if (pct <= 0) {
+    return { priceArs: listPrice, priceArsOriginal: null, discountPercent: 0 };
+  }
+  return {
+    priceArs: roundMoney(listPrice * (1 - pct / 100)),
+    priceArsOriginal: listPrice,
+    discountPercent: pct
+  };
+}
+
 function publicUser(user) {
   if (!user) return null;
   return {
@@ -90,7 +116,8 @@ function publicUser(user) {
     username: user.username,
     name: user.name || user.username,
     role: user.role,
-    priceListId: user.priceListId || null
+    priceListId: user.priceListId || null,
+    discountPercent: parseDiscountPercent(user.discountPercent)
   };
 }
 
@@ -221,6 +248,9 @@ function normalizeDb(parsed) {
     const seeded = seedDb();
     data.users = seeded.users;
     if (!data.priceLists.length) data.priceLists = seeded.priceLists;
+  }
+  for (const user of data.users) {
+    user.discountPercent = parseDiscountPercent(user.discountPercent);
   }
   return data;
 }
@@ -590,7 +620,7 @@ function catalogSummaries(list) {
   return sortCatalogSummaries([...map.values()]);
 }
 
-function catalogProduct(p, priceArs, { includeFob = false } = {}) {
+function catalogProduct(p, priceArs, { includeFob = false, priceArsOriginal = null } = {}) {
   const meta = getMeta(p.id);
   const item = {
     id: p.id,
@@ -610,7 +640,8 @@ function catalogProduct(p, priceArs, { includeFob = false } = {}) {
     badge: meta.badge || '',
     badgeText: meta.badgeText || '',
     sortOrder: Number.isFinite(meta.sortOrder) ? meta.sortOrder : null,
-    priceArs: Number.isFinite(priceArs) ? priceArs : null
+    priceArs: Number.isFinite(priceArs) ? priceArs : null,
+    priceArsOriginal: Number.isFinite(priceArsOriginal) ? priceArsOriginal : null
   };
   if (includeFob) item.fobUsd = Number.isFinite(p.fobUsd) ? p.fobUsd : null;
   return item;
@@ -888,6 +919,7 @@ app.get('/api/me', requireAuth, (req, res) => {
   res.json({
     user: publicUser(req.user),
     priceListName: list ? list.name : null,
+    discountPercent: parseDiscountPercent(req.user.discountPercent),
     whatsappNumber: normalizeWhatsapp(db.settings?.whatsappNumber)
   });
 });
@@ -1095,14 +1127,20 @@ app.get('/api/catalog', requireAuth, (req, res) => {
   const published = new Set(db.publishedIds);
   const list = getListById(req.user.priceListId);
   const prices = list && list.prices ? list.prices : {};
+  const discountPercent = parseDiscountPercent(req.user.discountPercent);
   const items = PRODUCTS
     .filter(p => isLocalProduct(p) && published.has(p.id))
-    .map(p => catalogProduct(p, prices[p.id]));
+    .map(p => {
+      const listPrice = Number.isFinite(prices[p.id]) ? prices[p.id] : null;
+      const priced = applyDiscount(listPrice, discountPercent);
+      return catalogProduct(p, priced.priceArs, { priceArsOriginal: priced.priceArsOriginal });
+    });
   res.json({
     products: items,
     catalogs: catalogSummaries(items),
     labels: db.customLabels || [],
-    priceListName: list ? list.name : null
+    priceListName: list ? list.name : null,
+    discountPercent
   });
 });
 
@@ -1433,7 +1471,8 @@ app.post('/api/admin/users', requireAdmin, async (req, res) => {
     name,
     passwordHash: hashPassword(password),
     role,
-    priceListId
+    priceListId,
+    discountPercent: parseDiscountPercent(req.body?.discountPercent)
   };
   db.users.push(user);
   await saveDb(db);
@@ -1459,6 +1498,9 @@ app.patch('/api/admin/users/:id', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Lista de precios inválida' });
     }
     user.priceListId = req.body.priceListId;
+  }
+  if (req.body?.discountPercent != null) {
+    user.discountPercent = parseDiscountPercent(req.body.discountPercent);
   }
   if (req.body?.password) {
     const password = String(req.body.password);

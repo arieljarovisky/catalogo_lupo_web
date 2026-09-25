@@ -1,3 +1,4 @@
+import argparse
 import json
 import re
 from collections import defaultdict
@@ -6,8 +7,21 @@ import openpyxl
 
 DATA = "data.js"
 DB = "db.json"
-XLSX = "lista-agosto-2026-capital.xlsx"
-OUT_JSON = "agosto-2026-capital-prices.json"
+
+PRESETS = {
+    "capital": {
+        "xlsx": "lista-agosto-2026-capital.xlsx",
+        "out_json": "agosto-2026-capital-prices.json",
+        "list_id": "lista-mayorista",
+        "list_name": "Agosto 2026 Capital",
+    },
+    "interior": {
+        "xlsx": "lista-agosto-2026-interior.xlsx",
+        "out_json": "agosto-2026-interior-prices.json",
+        "list_id": "lista-interior",
+        "list_name": "Agosto 2026 Interior",
+    },
+}
 
 
 def digits(value):
@@ -44,13 +58,37 @@ def load_products():
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Importar lista de precios agosto 2026")
+    parser.add_argument(
+        "preset",
+        nargs="?",
+        choices=sorted(PRESETS),
+        default="capital",
+        help="Lista a importar (default: capital)",
+    )
+    parser.add_argument("--xlsx", help="Ruta al Excel (override)")
+    parser.add_argument("--list-id", help="ID de la lista en db.json (override)")
+    parser.add_argument("--list-name", help="Nombre visible de la lista (override)")
+    parser.add_argument("--out-json", help="JSON seed de salida (override)")
+    args = parser.parse_args()
+
+    cfg = dict(PRESETS[args.preset])
+    if args.xlsx:
+        cfg["xlsx"] = args.xlsx
+    if args.out_json:
+        cfg["out_json"] = args.out_json
+    if args.list_id:
+        cfg["list_id"] = args.list_id
+    if args.list_name:
+        cfg["list_name"] = args.list_name
+
     products = load_products()
     by_key = defaultdict(list)
     for p in products:
         for key in product_keys(p["code"]):
             by_key[key].append(p)
 
-    wb = openpyxl.load_workbook(XLSX, data_only=True)
+    wb = openpyxl.load_workbook(cfg["xlsx"], data_only=True)
     ws = wb.active
     prices = {}
     matched_excel = 0
@@ -84,26 +122,32 @@ def main():
             continue
         missing_catalog.append(f"{p['code']} {p['name']}")
 
-    with open(OUT_JSON, "w", encoding="utf-8") as f:
+    with open(cfg["out_json"], "w", encoding="utf-8") as f:
         json.dump(prices, f, indent=2, ensure_ascii=False)
         f.write("\n")
 
     db = json.loads(open(DB, encoding="utf-8").read())
     lists = db.setdefault("priceLists", [])
-    mayorista = next((item for item in lists if item.get("id") == "lista-mayorista"), None)
-    if not mayorista:
-        mayorista = {"id": "lista-mayorista", "name": "Agosto 2026 Capital", "prices": {}}
-        lists.insert(0, mayorista)
-    mayorista["name"] = "Agosto 2026 Capital"
-    mayorista["prices"] = prices
+    target = next((item for item in lists if item.get("id") == cfg["list_id"]), None)
+    if not target:
+        target = {"id": cfg["list_id"], "name": cfg["list_name"], "prices": {}}
+        lists.append(target)
+    target["name"] = cfg["list_name"]
+    target["prices"] = prices
 
     with open(DB, "w", encoding="utf-8") as f:
         json.dump(db, f, indent=2, ensure_ascii=False)
         f.write("\n")
 
+    print(f"lista: {cfg['list_id']} ({cfg['list_name']})")
     print(f"productos con precio: {len(prices)} / {len(products)}")
     print(f"filas excel matcheadas: {matched_excel}")
     print(f"filas excel sin articulo en catalogo: {len(unmatched_excel)}")
+    if unmatched_excel:
+        for code, name, amount in unmatched_excel[:20]:
+            print(f" - {code} {name} -> {amount}")
+        if len(unmatched_excel) > 20:
+            print(f"   ... y {len(unmatched_excel) - 20} mas")
     if missing_catalog:
         print("en catalogo sin precio:")
         for line in missing_catalog:

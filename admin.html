@@ -215,6 +215,10 @@
           <label for="userList">Lista de precios</label>
           <select id="userList" required></select>
         </div>
+        <div class="field">
+          <label for="userDiscount">Descuento %</label>
+          <input id="userDiscount" type="number" min="0" max="100" step="0.01" value="0" placeholder="0">
+        </div>
         <button class="btn btn-black" type="submit">Crear usuario</button>
       </form>
       <div class="admin-table-wrap">
@@ -225,6 +229,7 @@
               <th>Nombre</th>
               <th>Rol</th>
               <th>Lista</th>
+              <th>Desc. %</th>
               <th>Nueva clave</th>
               <th></th>
             </tr>
