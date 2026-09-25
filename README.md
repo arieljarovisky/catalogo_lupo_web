@@ -13,7 +13,7 @@ npm start
 
 Después abrí [http://localhost:3000](http://localhost:3000).
 
-Sin variables de Supabase, en local usa `db.json` y `assets/uploads/`.
+La persistencia es el archivo `db.json` (usuarios, listas, precios, publicados) y las fotos en `assets/uploads/`.
 
 ## Accesos iniciales
 
@@ -25,47 +25,19 @@ Cambiá estas claves desde el panel de usuarios.
 ## Qué incluye
 
 - Login por usuario.
-- Cada cliente ve solo los productos publicados y el precio de **su lista**.
+- Cada cliente ve solo los productos publicados y el precio de **su lista**, con descuento % opcional por cliente.
 - Si un producto no tiene precio en esa lista, se muestra **Consultar**.
 - Panel admin: publicar/ocultar productos, crear y editar listas de precios en ARS, alta de usuarios y asignación de lista.
 - Pedido con talle, color y cantidad, exportable a Excel con precios en pesos.
 
 Los datos de ficha se extraen de los PDF en `pdfs/nuevos-catalogos/` (Boxers y slips, Lencería y Medias 2026).
 
-## Supabase (producción)
+## Producción (Vercel)
 
-En Vercel hace falta Supabase para que usuarios, precios, fotos y pedidos **persistan**.
+El deploy incluye `db.json`. Los cambios hechos desde el admin en Vercel viven en `/tmp` (mientras dure la instancia). Para dejarlos fijos: actualizá `db.json` en el repo y redeployá.
 
-### 1. Crear el schema
+Variable opcional en Vercel:
 
-En Supabase → **SQL Editor**, ejecutá el contenido de [`supabase/schema.sql`](supabase/schema.sql).
-
-Eso crea:
-
-- tabla `app_state` (estado del catálogo, equivalente a `db.json`)
-- tabla `orders` (excels de pedidos)
-- bucket público `uploads` (fotos custom)
-
-### 2. Variables de entorno
-
-En Vercel (y opcionalmente en local):
-
-| Variable | Dónde |
+| Variable | Uso |
 |---|---|
-| `SUPABASE_URL` | Project URL |
-| `SUPABASE_SECRET_KEY` | API Keys → secret (`sb_secret_...`) — solo backend |
 | `SESSION_SECRET` | texto largo y aleatorio |
-
-También acepta el nombre legacy `SUPABASE_SERVICE_ROLE_KEY` (JWT `eyJ...`).
-
-Nunca expongas la secret key en el frontend.
-
-### 3. Migrar el `db.json` actual
-
-```
-SUPABASE_URL=... SUPABASE_SECRET_KEY=... npm run migrate:supabase
-```
-
-### 4. Redeploy
-
-Después del deploy, cambiar fotos, precios y usuarios queda guardado en Supabase.

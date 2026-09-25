@@ -4,11 +4,9 @@
   "private": true,
   "description": "Catálogo B2B Lupo con usuarios, listas de precios y panel de administración.",
   "scripts": {
-    "start": "node server.js",
-    "migrate:supabase": "node scripts/migrate-to-supabase.js"
+    "start": "node server.js"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.112.4",
     "dotenv": "^17.4.2",
     "express": "^5.1.0",
     "express-session": "^1.18.2"

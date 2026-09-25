@@ -1,25 +1,20 @@
+require('dotenv').config();
+
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const crypto = require('crypto');
 const zlib = require('zlib');
 const express = require('express');
-const {
-  USE_SUPABASE,
-  fetchAppState,
-  upsertAppState,
-  uploadPublicFile,
-  removePublicFile,
-  saveOrder,
-  getOrder
-} = require('./lib/supabase');
 
 const ROOT = __dirname;
 const IS_VERCEL = Boolean(process.env.VERCEL);
-const DATA_DIR = IS_VERCEL ? '/tmp' : ROOT;
-const DB_PATH = path.join(DATA_DIR, 'db.json');
+// En Vercel el FS del deploy es de solo lectura: leemos el db.json del bundle
+// y escribimos en /tmp (válido mientras viva la instancia).
+const DB_SEED_PATH = path.join(ROOT, 'db.json');
+const DB_PATH = IS_VERCEL ? path.join('/tmp', 'db.json') : DB_SEED_PATH;
 const UPLOADS_DIR = IS_VERCEL ? path.join('/tmp', 'uploads') : path.join(ROOT, 'assets', 'uploads');
-const ORDERS_DIR = path.join(DATA_DIR, 'orders');
+const ORDERS_DIR = IS_VERCEL ? path.join('/tmp', 'orders') : path.join(ROOT, 'orders');
 const PORT = Number(process.env.PORT) || 3000;
 const LINGERIE_CATALOGS = new Set(['Lencería 2026', 'Lupo Lingerie PV 2026']);
 const DEFAULT_LABELS = [
@@ -27,10 +22,6 @@ const DEFAULT_LABELS = [
   { id: 'last', name: 'Últimas unidades', color: '#111111', promoTab: false },
   { id: 'sale', name: 'Liquidación', color: '#c45c00', promoTab: true }
 ];
-
-if (IS_VERCEL && !USE_SUPABASE) {
-  console.warn('Faltan SUPABASE_URL y SUPABASE_SECRET_KEY: en Vercel la data no va a persistir.');
-}
 
 function loadProducts() {
   const code = fs.readFileSync(path.join(ROOT, 'data.js'), 'utf8');
@@ -257,8 +248,11 @@ function normalizeDb(parsed) {
 }
 
 function loadDbFromFile() {
-  if (!fs.existsSync(DB_PATH)) return normalizeDb(seedDb());
-  return normalizeDb(JSON.parse(fs.readFileSync(DB_PATH, 'utf8')));
+  const source = fs.existsSync(DB_PATH)
+    ? DB_PATH
+    : (fs.existsSync(DB_SEED_PATH) ? DB_SEED_PATH : null);
+  if (!source) return normalizeDb(seedDb());
+  return normalizeDb(JSON.parse(fs.readFileSync(source, 'utf8')));
 }
 
 function saveDbToFile(data) {
@@ -269,15 +263,6 @@ function saveDbToFile(data) {
 }
 
 async function loadDb() {
-  if (USE_SUPABASE) {
-    const remote = await fetchAppState();
-    const data = normalizeDb(remote || seedDb());
-    if (!remote) await upsertAppState(data);
-    return data;
-  }
-  if (IS_VERCEL) {
-    throw new Error('Configurá SUPABASE_URL y SUPABASE_SECRET_KEY en Vercel.');
-  }
   const data = loadDbFromFile();
   saveDbToFile(data);
   return data;
@@ -286,14 +271,6 @@ async function loadDb() {
 async function saveDb(data) {
   db = data;
   try {
-    if (USE_SUPABASE) {
-      await upsertAppState(data);
-      return;
-    }
-    if (IS_VERCEL) {
-      console.warn('saveDb: sin Supabase en Vercel, no se persistió.');
-      return;
-    }
     saveDbToFile(data);
   } catch (err) {
     console.warn('No se pudo guardar la base:', err.message);
@@ -341,9 +318,9 @@ async function ensureDb(req, res, next) {
   } catch (err) {
     console.error(err);
     if (req.path.startsWith('/api/')) {
-      return res.status(503).json({ error: 'Base de datos no disponible. Revisá Supabase.' });
+      return res.status(503).json({ error: 'Base de datos no disponible.' });
     }
-    res.status(503).send('Base de datos no disponible. Revisá SUPABASE_URL y SUPABASE_SECRET_KEY.');
+    res.status(503).send('Base de datos no disponible.');
   }
 }
 
@@ -501,21 +478,6 @@ async function saveDataUrl(productId, dataUrl, suffix = '') {
   const safeSuffix = String(suffix || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40);
   const filename = `${safeId}${safeSuffix ? `-${safeSuffix}` : ''}-${Date.now()}.${ext}`;
 
-  if (USE_SUPABASE) {
-    try {
-      const url = await uploadPublicFile(filename, buf, contentType);
-      return { path: url };
-    } catch (err) {
-      return { error: `No se pudo guardar la imagen: ${err.message}` };
-    }
-  }
-
-  if (IS_VERCEL) {
-    return {
-      error: 'En Vercel las fotos necesitan Supabase Storage (SUPABASE_URL + SUPABASE_SECRET_KEY).'
-    };
-  }
-
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
   const abs = path.join(UPLOADS_DIR, filename);
   try {
@@ -523,19 +485,16 @@ async function saveDataUrl(productId, dataUrl, suffix = '') {
   } catch (err) {
     return { error: `No se pudo guardar la imagen: ${err.message}` };
   }
-  return { path: `assets/uploads/${filename}` };
+  return { path: IS_VERCEL ? `/assets/uploads/${filename}` : `assets/uploads/${filename}` };
 }
 
 async function deleteUpload(relPath) {
   const rel = String(relPath || '').replace(/\\/g, '/');
   if (!rel) return;
-  if (/^https?:\/\//i.test(rel)) {
-    if (!USE_SUPABASE) return;
-    try { await removePublicFile(rel); } catch {}
-    return;
-  }
-  if (!rel.startsWith('assets/uploads/')) return;
-  const filename = path.basename(rel);
+  if (/^https?:\/\//i.test(rel)) return;
+  const normalized = rel.replace(/^\//, '');
+  if (!normalized.startsWith('assets/uploads/')) return;
+  const filename = path.basename(normalized);
   const abs = path.join(UPLOADS_DIR, filename);
   if (abs.startsWith(UPLOADS_DIR) && fs.existsSync(abs)) {
     try { fs.unlinkSync(abs); } catch {}
@@ -543,21 +502,11 @@ async function deleteUpload(relPath) {
 }
 
 async function persistOrder(token, filename, xml) {
-  if (USE_SUPABASE) {
-    await saveOrder(token, filename, xml);
-    return;
-  }
-  if (IS_VERCEL) {
-    throw new Error('Pedidos en Vercel requieren Supabase.');
-  }
   fs.mkdirSync(ORDERS_DIR, { recursive: true });
   fs.writeFileSync(path.join(ORDERS_DIR, `${token}.xls`), xml, 'utf8');
 }
 
 async function readOrder(token) {
-  if (USE_SUPABASE) {
-    return getOrder(token);
-  }
   const file = path.join(ORDERS_DIR, `${token}.xls`);
   if (!fs.existsSync(file)) return null;
   return {
@@ -910,13 +859,10 @@ app.use(express.json({ limit: '8mb' }));
 
 app.get('/api/health', async (req, res) => {
   try {
-    if (!USE_SUPABASE) {
-      return res.json({ ok: true, persistencia: 'local' });
-    }
-    await fetchAppState();
-    return res.json({ ok: true, persistencia: 'supabase' });
+    await dbReady;
+    return res.json({ ok: true, persistencia: 'db.json' });
   } catch (err) {
-    return res.status(503).json({ ok: false, error: err.message || 'Supabase no disponible' });
+    return res.status(503).json({ ok: false, error: err.message || 'Base no disponible' });
   }
 });
 
@@ -1597,7 +1543,7 @@ if (require.main === module) {
     .then(() => {
       app.listen(PORT, () => {
         console.log(`Catálogo Lupo B2B en http://localhost:${PORT}`);
-        console.log(USE_SUPABASE ? 'Persistencia: Supabase' : 'Persistencia: db.json local');
+        console.log('Persistencia: db.json');
         console.log('Admin: admin / admin123');
         console.log('Cliente: cliente / cliente123');
       });
