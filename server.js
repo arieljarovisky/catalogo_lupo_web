@@ -1565,6 +1565,15 @@ app.delete('/api/admin/users/:id', requireAdmin, async (req, res) => {
   res.json({ ok: true });
 });
 
+app.use((err, req, res, next) => {
+  console.error(err);
+  const status = Number(err.status) || 500;
+  if (String(req.path || '').startsWith('/api/')) {
+    return res.status(status).json({ error: err.message || 'Error de servidor' });
+  }
+  res.status(status).send(err.message || 'Error');
+});
+
 if (require.main === module) {
   dbReady
     .then(() => {
