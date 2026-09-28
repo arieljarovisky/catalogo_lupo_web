@@ -4,40 +4,43 @@ Catálogo mayorista con usuarios, listas de precios en pesos y panel de administ
 
 ## Cómo iniciarlo
 
-En la carpeta del proyecto:
-
 ```
 npm install
 npm start
 ```
 
-Después abrí [http://localhost:3000](http://localhost:3000).
+Abrí [http://localhost:3000](http://localhost:3000).
 
-La persistencia es el archivo `db.json` (usuarios, listas, precios, publicados) y las fotos en `assets/uploads/`.
+En local usa `db.json` y `assets/uploads/`.
 
 ## Accesos iniciales
 
 - Administrador: `admin` / `admin123`
 - Cliente demo: `cliente` / `cliente123`
 
-Cambiá estas claves desde el panel de usuarios.
-
 ## Qué incluye
 
 - Login por usuario.
-- Cada cliente ve solo los productos publicados y el precio de **su lista**, con descuento % opcional por cliente.
-- Si un producto no tiene precio en esa lista, se muestra **Consultar**.
-- Panel admin: publicar/ocultar productos, crear y editar listas de precios en ARS, alta de usuarios y asignación de lista.
-- Pedido con talle, color y cantidad, exportable a Excel con precios en pesos.
+- Cada cliente ve los productos publicados y el precio de **su lista**, con descuento % opcional.
+- Panel admin: publicar productos, listas de precios, usuarios.
+- Pedido con talle/color/cantidad exportable a Excel.
 
-Los datos de ficha se extraen de los PDF en `pdfs/nuevos-catalogos/` (Boxers y slips, Lencería y Medias 2026).
+## Persistencia en Vercel (importante)
 
-## Producción (Vercel)
+En Vercel el disco es temporal: **sin Supabase los usuarios y precios se borran** al reiniciar.
 
-El deploy incluye `db.json`. Los cambios hechos desde el admin en Vercel viven en `/tmp` (mientras dure la instancia). Para dejarlos fijos: actualizá `db.json` en el repo y redeployá.
-
-Variable opcional en Vercel:
+Configurá en Vercel:
 
 | Variable | Uso |
 |---|---|
-| `SESSION_SECRET` | texto largo y aleatorio |
+| `SUPABASE_URL` | Project URL |
+| `SUPABASE_SECRET_KEY` | API Keys → secret (`sb_secret_...`) |
+| `SESSION_SECRET` | texto largo aleatorio |
+
+Schema: ejecutá [`supabase/schema.sql`](supabase/schema.sql) en el SQL Editor.
+
+Para subir el `db.json` local a Supabase:
+
+```
+npm run migrate:supabase
+```
