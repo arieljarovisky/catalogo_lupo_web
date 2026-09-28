@@ -13,17 +13,11 @@ Abrí [http://localhost:3000](http://localhost:3000).
 
 ## Persistencia
 
-| Archivo | Rol |
-|---|---|
-| `db.json` | Estado local (usuarios, precios). **Está en `.gitignore`**, no se sube al repo. |
-| `db.defaults.json` | Plantilla versionada. Es lo que usa el deploy en Vercel. |
+Hay **una sola base**: `db.json` (usuarios, listas, precios).
 
-En local el admin guarda en `db.json`. Para publicar esos cambios a producción, copiá a la plantilla y pusheá:
+Es el mismo archivo en local y en producción (viaja en el repo/deploy).
 
-```
-cp db.json db.defaults.json
-git add db.defaults.json && git commit -m "update db" && git push
-```
+En local el admin lo actualiza solo. Para que producción quede igual: `git add db.json && git commit && git push`.
 
 ## Accesos iniciales
 

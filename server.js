@@ -9,9 +9,7 @@ const express = require('express');
 
 const ROOT = __dirname;
 const IS_VERCEL = Boolean(process.env.VERCEL);
-// db.json = estado local (gitignored). db.defaults.json = plantilla versionada para deploy.
 const DB_PATH = path.join(ROOT, 'db.json');
-const DB_DEFAULTS_PATH = path.join(ROOT, 'db.defaults.json');
 const UPLOADS_DIR = IS_VERCEL ? path.join('/tmp', 'uploads') : path.join(ROOT, 'assets', 'uploads');
 const ORDERS_DIR = IS_VERCEL ? path.join('/tmp', 'orders') : path.join(ROOT, 'orders');
 const PORT = Number(process.env.PORT) || 3000;
@@ -247,12 +245,8 @@ function normalizeDb(parsed) {
 }
 
 function loadDbFromFile() {
-  // Preferir db.json local; si no hay, usar la plantilla versionada.
-  const source = fs.existsSync(DB_PATH)
-    ? DB_PATH
-    : (fs.existsSync(DB_DEFAULTS_PATH) ? DB_DEFAULTS_PATH : null);
-  if (!source) return normalizeDb(seedDb());
-  return normalizeDb(JSON.parse(fs.readFileSync(source, 'utf8')));
+  if (!fs.existsSync(DB_PATH)) return normalizeDb(seedDb());
+  return normalizeDb(JSON.parse(fs.readFileSync(DB_PATH, 'utf8')));
 }
 
 function saveDbToFile(data) {
@@ -264,7 +258,6 @@ function saveDbToFile(data) {
 
 async function loadDb() {
   const data = loadDbFromFile();
-  // En local, materializar db.json desde defaults si todavía no existe.
   if (!fs.existsSync(DB_PATH) && !IS_VERCEL) {
     saveDbToFile(data);
   }
@@ -273,7 +266,7 @@ async function loadDb() {
 
 async function saveDb(data) {
   db = data;
-  // En Vercel no se puede escribir el FS del deploy; el estado fijo es db.defaults.json.
+  // En Vercel el FS es de solo lectura: el mismo db.json del repo es la base.
   if (IS_VERCEL) return;
   try {
     saveDbToFile(data);
