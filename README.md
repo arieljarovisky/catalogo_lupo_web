@@ -13,10 +13,17 @@ Abrí [http://localhost:3000](http://localhost:3000).
 
 ## Persistencia
 
-Todo el estado (usuarios, listas, precios, publicados) está en **`db.json`** en la raíz del proyecto.
+| Archivo | Rol |
+|---|---|
+| `db.json` | Estado local (usuarios, precios). **Está en `.gitignore`**, no se sube al repo. |
+| `db.defaults.json` | Plantilla versionada. Es lo que usa el deploy en Vercel. |
 
-- En **local**, el admin guarda directo en ese archivo.
-- En **Vercel**, el archivo del deploy es el que vale: para cambiar usuarios/precios de forma definitiva, editá en local, guardá, y hacé `git push` (redeploy).
+En local el admin guarda en `db.json`. Para publicar esos cambios a producción, copiá a la plantilla y pusheá:
+
+```
+cp db.json db.defaults.json
+git add db.defaults.json && git commit -m "update db" && git push
+```
 
 ## Accesos iniciales
 
