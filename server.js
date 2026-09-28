@@ -6,16 +6,11 @@ const vm = require('vm');
 const crypto = require('crypto');
 const zlib = require('zlib');
 const express = require('express');
-const {
-  USE_GITHUB_DB,
-  fetchRemoteDb,
-  saveRemoteDb
-} = require('./lib/github-db');
 
 const ROOT = __dirname;
 const IS_VERCEL = Boolean(process.env.VERCEL);
-const DB_SEED_PATH = path.join(ROOT, 'db.json');
-const DB_PATH = IS_VERCEL ? path.join('/tmp', 'db.json') : DB_SEED_PATH;
+// Un solo archivo de estado. No usar /tmp: en Vercel se borra y “pisa” los datos.
+const DB_PATH = path.join(ROOT, 'db.json');
 const UPLOADS_DIR = IS_VERCEL ? path.join('/tmp', 'uploads') : path.join(ROOT, 'assets', 'uploads');
 const ORDERS_DIR = IS_VERCEL ? path.join('/tmp', 'orders') : path.join(ROOT, 'orders');
 const PORT = Number(process.env.PORT) || 3000;
@@ -25,10 +20,6 @@ const DEFAULT_LABELS = [
   { id: 'last', name: 'Últimas unidades', color: '#111111', promoTab: false },
   { id: 'sale', name: 'Liquidación', color: '#c45c00', promoTab: true }
 ];
-
-if (IS_VERCEL && !USE_GITHUB_DB) {
-  console.warn('Falta GITHUB_TOKEN: en Vercel los usuarios/precios no van a persistir.');
-}
 
 function loadProducts() {
   const code = fs.readFileSync(path.join(ROOT, 'data.js'), 'utf8');
@@ -255,11 +246,8 @@ function normalizeDb(parsed) {
 }
 
 function loadDbFromFile() {
-  const source = fs.existsSync(DB_PATH)
-    ? DB_PATH
-    : (fs.existsSync(DB_SEED_PATH) ? DB_SEED_PATH : null);
-  if (!source) return normalizeDb(seedDb());
-  return normalizeDb(JSON.parse(fs.readFileSync(source, 'utf8')));
+  if (!fs.existsSync(DB_PATH)) return normalizeDb(seedDb());
+  return normalizeDb(JSON.parse(fs.readFileSync(DB_PATH, 'utf8')));
 }
 
 function saveDbToFile(data) {
@@ -270,37 +258,22 @@ function saveDbToFile(data) {
 }
 
 async function loadDb() {
-  if (USE_GITHUB_DB) {
-    const remote = await fetchRemoteDb();
-    const data = normalizeDb(remote || (fs.existsSync(DB_SEED_PATH)
-      ? JSON.parse(fs.readFileSync(DB_SEED_PATH, 'utf8'))
-      : seedDb()));
-    if (!remote) await saveRemoteDb(data);
-    return data;
-  }
-  if (IS_VERCEL) {
-    throw new Error('Configurá GITHUB_TOKEN en Vercel para que los usuarios no se borren.');
-  }
   const data = loadDbFromFile();
-  saveDbToFile(data);
+  // Solo crear el archivo si no existe (local). Nunca pisar db.json al arrancar.
+  if (!fs.existsSync(DB_PATH) && !IS_VERCEL) {
+    saveDbToFile(data);
+  }
   return data;
 }
 
 async function saveDb(data) {
   db = data;
+  // En Vercel el FS del deploy es de solo lectura: el estado fijo es el db.json del repo.
+  if (IS_VERCEL) return;
   try {
-    if (USE_GITHUB_DB) {
-      await saveRemoteDb(data);
-      if (!IS_VERCEL) saveDbToFile(data);
-      return;
-    }
-    if (IS_VERCEL) {
-      console.warn('saveDb: sin GITHUB_TOKEN en Vercel, no se persistió.');
-      return;
-    }
     saveDbToFile(data);
   } catch (err) {
-    console.warn('No se pudo guardar la base:', err.message);
+    console.warn('No se pudo guardar db.json:', err.message);
     throw err;
   }
 }
@@ -345,9 +318,9 @@ async function ensureDb(req, res, next) {
   } catch (err) {
     console.error(err);
     if (req.path.startsWith('/api/')) {
-      return res.status(503).json({ error: 'Base de datos no disponible. Revisá GITHUB_TOKEN en Vercel.' });
+      return res.status(503).json({ error: 'Base de datos no disponible.' });
     }
-    res.status(503).send('Base de datos no disponible. Revisá GITHUB_TOKEN.');
+    res.status(503).send('Base de datos no disponible.');
   }
 }
 
@@ -887,10 +860,7 @@ app.use(express.json({ limit: '8mb' }));
 app.get('/api/health', async (req, res) => {
   try {
     await dbReady;
-    return res.json({
-      ok: true,
-      persistencia: USE_GITHUB_DB ? 'github' : 'db.json'
-    });
+    return res.json({ ok: true, persistencia: 'db.json' });
   } catch (err) {
     return res.status(503).json({ ok: false, error: err.message || 'Base no disponible' });
   }
@@ -1573,7 +1543,7 @@ if (require.main === module) {
     .then(() => {
       app.listen(PORT, () => {
         console.log(`Catálogo Lupo B2B en http://localhost:${PORT}`);
-        console.log(USE_GITHUB_DB ? 'Persistencia: GitHub (rama data)' : 'Persistencia: db.json local');
+        console.log('Persistencia: db.json');
         console.log('Admin: admin / admin123');
         console.log('Cliente: cliente / cliente123');
       });
