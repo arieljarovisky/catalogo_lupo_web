@@ -1,6 +1,6 @@
 # Catálogo Lupo B2B
 
-Catálogo mayorista con usuarios, listas de precios en pesos y panel de administración, con estilo inspirado en [multilupo.com.ar](https://www.multilupo.com.ar).
+Catálogo mayorista con usuarios, listas de precios y panel de administración.
 
 ## Cómo iniciarlo
 
@@ -11,36 +11,31 @@ npm start
 
 Abrí [http://localhost:3000](http://localhost:3000).
 
-En local usa `db.json` y `assets/uploads/`.
+En local persiste en `db.json`.
 
 ## Accesos iniciales
 
 - Administrador: `admin` / `admin123`
 - Cliente demo: `cliente` / `cliente123`
 
-## Qué incluye
+## Persistencia en Vercel (sin Supabase)
 
-- Login por usuario.
-- Cada cliente ve los productos publicados y el precio de **su lista**, con descuento % opcional.
-- Panel admin: publicar productos, listas de precios, usuarios.
-- Pedido con talle/color/cantidad exportable a Excel.
+Vercel no guarda archivos entre reinicios. El estado (`db.json`: usuarios, listas, precios) se guarda en la rama **`data`** del mismo repo de GitHub.
 
-## Persistencia en Vercel (importante)
+### 1. Crear un token de GitHub
 
-En Vercel el disco es temporal: **sin Supabase los usuarios y precios se borran** al reiniciar.
+1. GitHub → **Settings → Developer settings → Personal access tokens → Fine-grained tokens**
+2. Repository: `catalogo_lupo_web`
+3. Permissions → **Contents: Read and write**
+4. Generá el token
 
-Configurá en Vercel:
+### 2. Variables en Vercel
 
-| Variable | Uso |
+| Variable | Valor |
 |---|---|
-| `SUPABASE_URL` | Project URL |
-| `SUPABASE_SECRET_KEY` | API Keys → secret (`sb_secret_...`) |
+| `GITHUB_TOKEN` | el token |
+| `GITHUB_REPO` | `arieljarovisky/catalogo_lupo_web` |
+| `GITHUB_BRANCH` | `data` (default) |
 | `SESSION_SECRET` | texto largo aleatorio |
 
-Schema: ejecutá [`supabase/schema.sql`](supabase/schema.sql) en el SQL Editor.
-
-Para subir el `db.json` local a Supabase:
-
-```
-npm run migrate:supabase
-```
+Después del deploy, `/api/health` debe responder `"persistencia":"github"`.
