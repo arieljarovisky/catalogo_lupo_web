@@ -35,6 +35,15 @@
       "priceListId": "lista-mayorista",
       "passwordHash": "01f63dcfcd3514330ac8af5002d46ec1:10c5375b85e4f030d388f0dfd593cb12c3aa901d1c3930b8a986923e3656551d7692170198e490004463bda68c1ec91ece7f66ce73fe20c79fd7e60e084d894b",
       "discountPercent": 0
+    },
+    {
+      "id": "92c77c8c0e1ce0dc",
+      "username": "gabrielahernandez",
+      "name": "gabriela hernandez",
+      "passwordHash": "d9c3c96a61dd466735f607ed5d8f12a9:f6de19d99764f9fc7a9a9d9aebe347d5eb102b4530cf825be3e8231efd9423ce05e9d9fc81f31aa30486e6db7d6c346afbead0da9fb8a34256e502a78fd5257b",
+      "role": "cliente",
+      "priceListId": "lista-interior",
+      "discountPercent": 10
     }
   ],
   "settings": {
