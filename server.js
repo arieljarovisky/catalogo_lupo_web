@@ -6,6 +6,11 @@ const vm = require('vm');
 const crypto = require('crypto');
 const zlib = require('zlib');
 const express = require('express');
+const {
+  USE_REMOTE_DB,
+  fetchRemoteDb,
+  saveRemoteDb
+} = require('./lib/db-remote');
 
 const ROOT = __dirname;
 const IS_VERCEL = Boolean(process.env.VERCEL);
@@ -19,6 +24,10 @@ const DEFAULT_LABELS = [
   { id: 'last', name: 'Últimas unidades', color: '#111111', promoTab: false },
   { id: 'sale', name: 'Liquidación', color: '#c45c00', promoTab: true }
 ];
+
+if (IS_VERCEL && !USE_REMOTE_DB) {
+  console.warn('Falta GITHUB_TOKEN: en Vercel el admin no puede guardar usuarios/precios.');
+}
 
 function loadProducts() {
   const code = fs.readFileSync(path.join(ROOT, 'data.js'), 'utf8');
@@ -257,21 +266,37 @@ function saveDbToFile(data) {
 }
 
 async function loadDb() {
-  const data = loadDbFromFile();
-  if (!fs.existsSync(DB_PATH) && !IS_VERCEL) {
-    saveDbToFile(data);
+  // Una sola base: si hay GITHUB_TOKEN, local y prod usan el mismo db.json remoto.
+  if (USE_REMOTE_DB) {
+    const remote = await fetchRemoteDb();
+    const data = normalizeDb(remote || loadDbFromFile());
+    if (!remote) await saveRemoteDb(data);
+    if (!IS_VERCEL) saveDbToFile(data);
+    return data;
   }
+  if (IS_VERCEL) {
+    // Fallback: solo lectura del db.json del deploy (el admin no podrá guardar).
+    return loadDbFromFile();
+  }
+  const data = loadDbFromFile();
+  if (!fs.existsSync(DB_PATH)) saveDbToFile(data);
   return data;
 }
 
 async function saveDb(data) {
   db = data;
-  // En Vercel el FS es de solo lectura: el mismo db.json del repo es la base.
-  if (IS_VERCEL) return;
   try {
+    if (USE_REMOTE_DB) {
+      await saveRemoteDb(data);
+      if (!IS_VERCEL) saveDbToFile(data);
+      return;
+    }
+    if (IS_VERCEL) {
+      throw new Error('En producción falta GITHUB_TOKEN: no se pueden guardar cambios. Configuralo en Vercel.');
+    }
     saveDbToFile(data);
   } catch (err) {
-    console.warn('No se pudo guardar db.json:', err.message);
+    console.warn('No se pudo guardar la base:', err.message);
     throw err;
   }
 }
@@ -858,7 +883,11 @@ app.use(express.json({ limit: '8mb' }));
 app.get('/api/health', async (req, res) => {
   try {
     await dbReady;
-    return res.json({ ok: true, persistencia: 'db.json' });
+    return res.json({
+      ok: true,
+      persistencia: USE_REMOTE_DB ? 'db.json-remoto' : 'db.json',
+      puedeGuardar: USE_REMOTE_DB || !IS_VERCEL
+    });
   } catch (err) {
     return res.status(503).json({ ok: false, error: err.message || 'Base no disponible' });
   }
@@ -1541,7 +1570,7 @@ if (require.main === module) {
     .then(() => {
       app.listen(PORT, () => {
         console.log(`Catálogo Lupo B2B en http://localhost:${PORT}`);
-        console.log('Persistencia: db.json');
+        console.log(USE_REMOTE_DB ? 'Persistencia: db.json remoto (GitHub rama data)' : 'Persistencia: db.json local');
         console.log('Admin: admin / admin123');
         console.log('Cliente: cliente / cliente123');
       });

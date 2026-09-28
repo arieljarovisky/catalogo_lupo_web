@@ -9,15 +9,24 @@ npm install
 npm start
 ```
 
-Abrí [http://localhost:3000](http://localhost:3000).
+## Una sola base: `db.json`
 
-## Persistencia
+Local y producción usan el **mismo** `db.json`.
 
-Hay **una sola base**: `db.json` (usuarios, listas, precios).
+- **Local (sin token):** lee/escribe el archivo `db.json` del disco.
+- **Producción (Vercel):** necesita `GITHUB_TOKEN` para leer/escribir ese mismo `db.json` en la rama `data` del repo (así los usuarios no se borran).
 
-Es el mismo archivo en local y en producción (viaja en el repo/deploy).
+### Variable obligatoria en Vercel
 
-En local el admin lo actualiza solo. Para que producción quede igual: `git add db.json && git commit && git push`.
+1. Creá un Fine-grained token: [github.com/settings/tokens?type=beta](https://github.com/settings/tokens?type=beta)
+   - Repo: `catalogo_lupo_web`
+   - Contents: **Read and write**
+2. En Vercel → Settings → Environment Variables:
+   - `GITHUB_TOKEN` = el token
+   - `GITHUB_REPO` = `arieljarovisky/catalogo_lupo_web`
+   - `GITHUB_BRANCH` = `data`
+
+Sin eso, el sitio abre pero **el admin no puede guardar** en producción.
 
 ## Accesos iniciales
 
