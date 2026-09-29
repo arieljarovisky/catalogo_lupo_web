@@ -268,9 +268,21 @@ function saveDbToFile(data) {
 async function loadDb() {
   // Una sola base: si hay GITHUB_TOKEN, local y prod usan el mismo db.json remoto.
   if (USE_REMOTE_DB) {
-    const remote = await fetchRemoteDb();
+    let remote = null;
+    try {
+      remote = await fetchRemoteDb();
+    } catch (err) {
+      // No tumbar la app: si GitHub falla al arrancar, servir el db.json del deploy.
+      console.warn('No se pudo leer db remoto, uso db.json local:', err.message);
+    }
     const data = normalizeDb(remote || loadDbFromFile());
-    if (!remote) await saveRemoteDb(data);
+    if (!remote) {
+      try {
+        await saveRemoteDb(data);
+      } catch (err) {
+        console.warn('No se pudo subir db.json inicial a GitHub:', err.message);
+      }
+    }
     if (!IS_VERCEL) saveDbToFile(data);
     return data;
   }
