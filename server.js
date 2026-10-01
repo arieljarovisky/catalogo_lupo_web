@@ -426,7 +426,7 @@ function parseStockMap(raw, product) {
   if (raw == null) return undefined;
   if (typeof raw !== 'object' || Array.isArray(raw)) return null;
   const sizes = new Set(sizesFromValue(product?.sizes));
-  const colors = (product?.colors || []).map(c => String(c.code || '').trim()).filter(Boolean);
+  const colors = product ? resolvedColors(product).map(c => String(c.code || '').trim()).filter(Boolean) : [];
   const colorSet = new Set(colors.length ? colors : ['-']);
   const cleaned = {};
   for (const [key, value] of Object.entries(raw)) {
@@ -454,6 +454,14 @@ function setMeta(id, patch) {
   const product = PRODUCT_BY_ID.get(id);
   if (!product || isLocalProduct(product) || !LOCAL_CATALOGS.has(current.argentinaCatalog)) {
     delete current.argentinaCatalog;
+  }
+  const keepsArgentinaColors = product && (isLocalProduct(product) || LOCAL_CATALOGS.has(current.argentinaCatalog));
+  if (!keepsArgentinaColors || !Array.isArray(current.extraColors)) {
+    delete current.extraColors;
+  } else {
+    const cleanedColors = sanitizeExtraColors(current.extraColors, product);
+    if (cleanedColors.length) current.extraColors = cleanedColors;
+    else delete current.extraColors;
   }
   if (current.colorImages && typeof current.colorImages === 'object') {
     const cleaned = {};
@@ -494,9 +502,51 @@ function resolvedImage(p) {
   return getMeta(p.id).image || p.image;
 }
 
+function sanitizeExtraColors(raw, product) {
+  if (!Array.isArray(raw)) return [];
+  const baseCodes = new Set((product?.colors || []).map(c => String(c.code || '').trim()).filter(Boolean));
+  const out = [];
+  const seen = new Set();
+  for (const item of raw) {
+    const name = String(item?.name || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+    const code = String(item?.code || '').trim().slice(0, 16);
+    if (!name || !/^[A-Za-z0-9_-]+$/.test(code)) continue;
+    if (baseCodes.has(code) || seen.has(code) || code === '-' || code === 'SURTIDO') continue;
+    seen.add(code);
+    out.push({ code, name });
+  }
+  return out.slice(0, 40);
+}
+
+function foldColorName(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('es')
+    .trim();
+}
+
+function colorCodeFromName(name, taken) {
+  const base = String(name || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '')
+    .slice(0, 12) || 'COLOR';
+  let code = base;
+  let n = 2;
+  while (taken.has(code) || code === '-' || code === 'SURTIDO') {
+    const suffix = String(n++);
+    code = `${base.slice(0, Math.max(1, 12 - suffix.length))}${suffix}`;
+  }
+  return code;
+}
+
 function resolvedColors(p) {
-  const overrides = getMeta(p.id).colorImages || {};
-  return (p.colors || []).map(c => {
+  if (!p) return [];
+  const meta = getMeta(p.id);
+  const overrides = meta.colorImages || {};
+  const base = (p.colors || []).map(c => {
     const code = String(c.code || '');
     const custom = overrides[code];
     return {
@@ -504,9 +554,24 @@ function resolvedColors(p) {
       name: c.name,
       image: custom || c.image || '',
       originalImage: c.image || '',
-      hasCustomImage: Boolean(custom)
+      hasCustomImage: Boolean(custom),
+      added: false
     };
   });
+  if (!isArgentinaProduct(p)) return base;
+  const extras = (Array.isArray(meta.extraColors) ? meta.extraColors : []).map(c => ({
+    code: c.code,
+    name: c.name,
+    image: overrides[c.code] || '',
+    originalImage: '',
+    hasCustomImage: Boolean(overrides[c.code]),
+    added: true
+  }));
+  return [...base, ...extras];
+}
+
+function findProductColor(p, code) {
+  return resolvedColors(p).find(c => String(c.code) === String(code)) || null;
 }
 
 function setColorImage(id, colorCode, imagePath) {
@@ -1442,12 +1507,64 @@ app.delete('/api/admin/products/:id/image', requireAdmin, async (req, res) => {
   }
 });
 
+app.post('/api/admin/products/:id/colors', requireAdmin, async (req, res) => {
+  try {
+    const p = PRODUCT_BY_ID.get(req.params.id);
+    if (!p) return res.status(404).json({ error: 'Producto no encontrado' });
+    if (!isArgentinaProduct(p)) {
+      return res.status(400).json({ error: 'Solo podés agregar colores en productos de Argentina.' });
+    }
+    const name = String(req.body?.name || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+    if (!name) return res.status(400).json({ error: 'Ingresá el nombre del color.' });
+    const existing = resolvedColors(p);
+    const sameName = existing.some(c => foldColorName(c.name) === foldColorName(name));
+    if (sameName) return res.status(400).json({ error: 'Ese color ya está en el producto.' });
+    const taken = new Set(existing.map(c => String(c.code || '')));
+    const code = colorCodeFromName(name, taken);
+    const extraColors = sanitizeExtraColors([...(getMeta(p.id).extraColors || []), { code, name }], p);
+    setMeta(p.id, { extraColors });
+    await saveDb(db);
+    res.json({ product: productAdminView(p) });
+  } catch (err) {
+    console.error('POST product color', err);
+    res.status(500).json({ error: err.message || 'No se pudo agregar el color.' });
+  }
+});
+
+app.delete('/api/admin/products/:id/colors/:code', requireAdmin, async (req, res) => {
+  try {
+    const p = PRODUCT_BY_ID.get(req.params.id);
+    if (!p) return res.status(404).json({ error: 'Producto no encontrado' });
+    const code = decodeURIComponent(String(req.params.code || '')).trim();
+    const extras = getMeta(p.id).extraColors || [];
+    if (!extras.some(c => String(c.code) === code)) {
+      return res.status(404).json({ error: 'Solo podés quitar colores que agregaste.' });
+    }
+    const prev = (getMeta(p.id).colorImages || {})[code];
+    await deleteUpload(prev);
+    const stock = { ...(getMeta(p.id).stock || {}) };
+    for (const key of Object.keys(stock)) {
+      if (key.endsWith(`|${code}`)) delete stock[key];
+    }
+    setColorImage(p.id, code, '');
+    setMeta(p.id, {
+      extraColors: extras.filter(c => String(c.code) !== code),
+      stock
+    });
+    await saveDb(db);
+    res.json({ product: productAdminView(p) });
+  } catch (err) {
+    console.error('DELETE product color', err);
+    res.status(500).json({ error: err.message || 'No se pudo quitar el color.' });
+  }
+});
+
 app.post('/api/admin/products/:id/colors/:code/image', requireAdmin, async (req, res) => {
   try {
     const p = PRODUCT_BY_ID.get(req.params.id);
     if (!p) return res.status(404).json({ error: 'Producto no encontrado' });
     const code = decodeURIComponent(String(req.params.code || '')).trim();
-    const color = (p.colors || []).find(c => String(c.code) === code);
+    const color = findProductColor(p, code);
     if (!color) return res.status(404).json({ error: 'Color no encontrado' });
     const saved = await saveDataUrl(p.id, req.body?.dataUrl, code);
     if (saved.error) return res.status(400).json({ error: saved.error });
@@ -1467,7 +1584,7 @@ app.delete('/api/admin/products/:id/colors/:code/image', requireAdmin, async (re
     const p = PRODUCT_BY_ID.get(req.params.id);
     if (!p) return res.status(404).json({ error: 'Producto no encontrado' });
     const code = decodeURIComponent(String(req.params.code || '')).trim();
-    const color = (p.colors || []).find(c => String(c.code) === code);
+    const color = findProductColor(p, code);
     if (!color) return res.status(404).json({ error: 'Color no encontrado' });
     const prev = (getMeta(p.id).colorImages || {})[code];
     await deleteUpload(prev);

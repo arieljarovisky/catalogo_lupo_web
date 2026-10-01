@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=20">
+  <link rel="stylesheet" href="/styles.css?v=21">
 </head>
 <body>
   <div class="topbar">
@@ -281,9 +281,13 @@
         </div>
         <button id="restoreImageBtn" class="btn btn-ghost" type="button">Usar foto original</button>
         <div class="field">
-          <label>Fotos por color</label>
+          <label>Colores</label>
           <div id="editorColorPhotos" class="editor-colors"></div>
-          <p class="muted" style="margin:6px 0 0;font-size:12px;">Elegí un color y subí una imagen JPG, PNG o WEBP (máx. 6 MB).</p>
+          <form id="addColorForm" class="add-color-form" hidden>
+            <input id="newColorName" maxlength="40" placeholder="Nombre del color, ej. Bordó">
+            <button class="btn btn-black" type="submit">Agregar color</button>
+          </form>
+          <p class="muted" style="margin:6px 0 0;font-size:12px;">En Argentina podés sumar colores. Después cargá la foto y el stock de cada uno.</p>
         </div>
         <div class="field" id="editorArgentinaField" hidden>
           <label for="editorArgentinaCatalog">Catálogo de Argentina</label>
@@ -317,6 +321,6 @@
   </div>
 
   <script src="/js/common.js?v=7"></script>
-  <script src="/js/admin.js?v=13"></script>
+  <script src="/js/admin.js?v=14"></script>
 </body>
 </html>

@@ -300,6 +300,7 @@ function fillEditor(p) {
   if ($('editorPublishedWrap')) $('editorPublishedWrap').hidden = !sellable;
   if ($('editorPublished')) $('editorPublished').checked = Boolean(p.published);
   if ($('editorStockField')) $('editorStockField').hidden = !sellable;
+  if ($('addColorForm')) $('addColorForm').hidden = !sellable;
   renderEditorColors(p);
   renderEditorStock(p);
 }
@@ -328,8 +329,10 @@ function renderEditorColors(p) {
         <strong>${escapeHtml(colorLabelAdmin(c))}</strong>
         <span class="muted">${escapeHtml(c.code || '')}</span>
         <div class="editor-color-actions">
-          <label class="btn btn-ghost editor-color-upload">Cambiar<input type="file" accept="image/jpeg,image/png,image/webp" data-color-file="${escapeHtml(c.code)}" hidden></label>
-          <button type="button" class="btn btn-ghost" data-color-restore="${escapeHtml(c.code)}" ${c.hasCustomImage ? '' : 'disabled'}>Original</button>
+          <label class="btn btn-ghost editor-color-upload">Foto<input type="file" accept="image/jpeg,image/png,image/webp" data-color-file="${escapeHtml(c.code)}" hidden></label>
+          ${c.added
+            ? `<button type="button" class="btn btn-ghost" data-color-remove="${escapeHtml(c.code)}">Quitar</button>`
+            : `<button type="button" class="btn btn-ghost" data-color-restore="${escapeHtml(c.code)}" ${c.hasCustomImage ? '' : 'disabled'}>Original</button>`}
         </div>
       </div>
     </article>`;
@@ -678,6 +681,19 @@ async function init() {
     } catch (err) { showFlash(err.message, true); }
     $('editorFile').value = '';
   });
+  $('addColorForm')?.addEventListener('submit', async e => {
+    e.preventDefault();
+    if (!editingId) return;
+    const name = $('newColorName')?.value.trim() || '';
+    if (!name) return showFlash('Ingresá el nombre del color.', true);
+    try {
+      const data = await api(`/api/admin/products/${editingId}/colors`, { method: 'POST', body: { name } });
+      $('newColorName').value = '';
+      upsertProduct(data.product);
+      renderProducts();
+      showFlash('Color agregado.');
+    } catch (err) { showFlash(err.message, true); }
+  });
   $('editorColorPhotos')?.addEventListener('change', async e => {
     const input = e.target.closest('[data-color-file]');
     if (!input || !editingId) return;
@@ -704,6 +720,18 @@ async function init() {
   });
   $('editorColorPhotos')?.addEventListener('click', async e => {
     const btn = e.target.closest('[data-color-restore]');
+    const removeBtn = e.target.closest('[data-color-remove]');
+    if (removeBtn && editingId) {
+      const code = removeBtn.dataset.colorRemove;
+      if (!confirm('¿Quitar este color del producto?')) return;
+      try {
+        const data = await api(`/api/admin/products/${editingId}/colors/${encodeURIComponent(code)}`, { method: 'DELETE' });
+        upsertProduct(data.product);
+        renderProducts();
+        showFlash('Color quitado.');
+      } catch (err) { showFlash(err.message, true); }
+      return;
+    }
     if (!btn || !editingId || btn.disabled) return;
     const code = btn.dataset.colorRestore;
     try {

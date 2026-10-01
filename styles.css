@@ -893,6 +893,12 @@ body.brasil-mode .topbar span:nth-child(2) { font-weight: 800; }
   height: 100%;
   object-fit: contain;
 }
+.add-color-form {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.add-color-form input { flex: 1; min-width: 0; }
 .editor-colors {
   display: flex;
   flex-direction: column;
