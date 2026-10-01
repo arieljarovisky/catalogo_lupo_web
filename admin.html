@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=19">
+  <link rel="stylesheet" href="/styles.css?v=20">
 </head>
 <body>
   <div class="topbar">
@@ -58,6 +58,9 @@
         <button id="hideFiltered" class="btn btn-ghost" type="button" data-local-only>Ocultar filtrados</button>
         <select id="bulkBadge" data-local-only></select>
         <button id="applyBulkBadge" class="btn btn-ghost" type="button" data-local-only>Aplicar etiqueta a filtrados</button>
+        <select id="argentinaCatalogPick" data-brasil-only hidden></select>
+        <button id="addToArgentina" class="btn btn-black" type="button" data-brasil-only hidden>Agregar a Argentina</button>
+        <button id="removeFromArgentina" class="btn btn-ghost" type="button" data-brasil-only hidden>Quitar de Argentina</button>
         <a class="btn btn-black" href="/brasil" data-brasil-only hidden>Ir a Pedidos Brasil</a>
         <span class="muted" id="productStats"></span>
       </div>
@@ -65,6 +68,7 @@
         <table class="admin-table">
           <thead>
             <tr>
+              <th class="col-brasil-only"><input id="selectBrasilProducts" type="checkbox" title="Seleccionar visibles"></th>
               <th class="col-local-only"><input id="selectAllProducts" type="checkbox"></th>
               <th></th>
               <th class="col-local-only" title="Menor número = aparece antes">Orden</th>
@@ -281,12 +285,17 @@
           <div id="editorColorPhotos" class="editor-colors"></div>
           <p class="muted" style="margin:6px 0 0;font-size:12px;">Elegí un color y subí una imagen JPG, PNG o WEBP (máx. 6 MB).</p>
         </div>
-        <div class="field col-local-only" id="editorStockField">
+        <div class="field" id="editorArgentinaField" hidden>
+          <label for="editorArgentinaCatalog">Catálogo de Argentina</label>
+          <select id="editorArgentinaCatalog"></select>
+          <p class="muted" style="margin:6px 0 0;font-size:12px;">Elegí en qué catálogo de Argentina se vende. “Solo en Brasil” lo saca de la venta mayorista.</p>
+        </div>
+        <div class="field" id="editorStockField" hidden>
           <label>Stock por talle y color</label>
           <div id="editorStockWrap" class="editor-stock-wrap"></div>
           <p class="muted" style="margin:6px 0 0;font-size:12px;">Vacío = sin límite. 0 = sin stock. Solo aplica al catálogo de Argentina.</p>
         </div>
-        <label class="label-check col-local-only" id="editorPublishedWrap">
+        <label class="label-check" id="editorPublishedWrap" hidden>
           <input id="editorPublished" type="checkbox"> Visible en el catálogo
         </label>
         <div class="field">
@@ -308,6 +317,6 @@
   </div>
 
   <script src="/js/common.js?v=7"></script>
-  <script src="/js/admin.js?v=12"></script>
+  <script src="/js/admin.js?v=13"></script>
 </body>
 </html>

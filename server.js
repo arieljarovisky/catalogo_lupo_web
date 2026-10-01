@@ -58,6 +58,23 @@ function isLocalProduct(p) {
   return productOrigin(p) === 'local';
 }
 
+function parseArgentinaCatalog(raw) {
+  const name = String(raw ?? '').trim();
+  if (!name) return '';
+  return LOCAL_CATALOGS.has(name) ? name : null;
+}
+
+function argentinaCatalogOf(p) {
+  if (!p) return '';
+  if (isLocalProduct(p)) return p.catalog;
+  const assigned = String(getMeta(p.id).argentinaCatalog || '').trim();
+  return LOCAL_CATALOGS.has(assigned) ? assigned : '';
+}
+
+function isArgentinaProduct(p) {
+  return Boolean(argentinaCatalogOf(p));
+}
+
 function defaultPublishedIds() {
   return PRODUCTS.filter(isLocalProduct).map(p => p.id);
 }
@@ -434,6 +451,10 @@ function setMeta(id, patch) {
   if (!current.badge) delete current.badge;
   if (!current.badgeText) delete current.badgeText;
   if (!Number.isFinite(current.sortOrder)) delete current.sortOrder;
+  const product = PRODUCT_BY_ID.get(id);
+  if (!product || isLocalProduct(product) || !LOCAL_CATALOGS.has(current.argentinaCatalog)) {
+    delete current.argentinaCatalog;
+  }
   if (current.colorImages && typeof current.colorImages === 'object') {
     const cleaned = {};
     for (const [code, image] of Object.entries(current.colorImages)) {
@@ -587,6 +608,8 @@ function productAdminView(p) {
     hasCustomName: Boolean(meta.name),
     category: p.category,
     catalog: p.catalog,
+    argentinaCatalog: isLocalProduct(p) ? '' : argentinaCatalogOf(p),
+    inArgentina: isArgentinaProduct(p),
     origin: productOrigin(p),
     pdf: p.pdf || null,
     page: p.page || null,
@@ -627,14 +650,14 @@ function catalogSummaries(list) {
   return sortCatalogSummaries([...map.values()]);
 }
 
-function catalogProduct(p, priceArs, { includeFob = false, priceArsOriginal = null } = {}) {
+function catalogProduct(p, priceArs, { includeFob = false, priceArsOriginal = null, forArgentina = false } = {}) {
   const meta = getMeta(p.id);
   const item = {
     id: p.id,
     code: p.code,
     name: resolvedName(p),
     category: p.category,
-    catalog: p.catalog,
+    catalog: forArgentina ? (argentinaCatalogOf(p) || p.catalog) : p.catalog,
     pdf: p.pdf,
     page: p.page,
     image: resolvedImage(p),
@@ -671,6 +694,10 @@ function adminCatalogSummaries() {
   for (const p of PRODUCTS) {
     counts.set(p.catalog, (counts.get(p.catalog) || 0) + 1);
     if (Number.isFinite(p.fobUsd)) fobCounts.set(p.catalog, (fobCounts.get(p.catalog) || 0) + 1);
+    if (!isLocalProduct(p)) {
+      const assigned = argentinaCatalogOf(p);
+      if (assigned) counts.set(assigned, (counts.get(assigned) || 0) + 1);
+    }
   }
   return loadCatalogRegistry().map(entry => {
     const abs = path.join(ROOT, entry.pdf || '');
@@ -1177,11 +1204,14 @@ app.get('/api/catalog', requireAuth, (req, res) => {
   const prices = list && list.prices ? list.prices : {};
   const discountPercent = parseDiscountPercent(req.user.discountPercent);
   const items = PRODUCTS
-    .filter(p => isLocalProduct(p) && published.has(p.id))
+    .filter(p => isArgentinaProduct(p) && published.has(p.id))
     .map(p => {
       const listPrice = Number.isFinite(prices[p.id]) ? prices[p.id] : null;
       const priced = applyDiscount(listPrice, discountPercent);
-      return catalogProduct(p, priced.priceArs, { priceArsOriginal: priced.priceArsOriginal });
+      return catalogProduct(p, priced.priceArs, {
+        priceArsOriginal: priced.priceArsOriginal,
+        forArgentina: true
+      });
     });
   sendGzipJson(req, res, {
     products: items,
@@ -1288,7 +1318,7 @@ app.patch('/api/admin/products/visibility', requireAdmin, async (req, res) => {
   const published = Boolean(req.body?.published);
   const valid = new Set(ids.filter(id => {
     const product = PRODUCT_BY_ID.get(id);
-    return product && isLocalProduct(product);
+    return product && isArgentinaProduct(product);
   }));
   const current = new Set(db.publishedIds);
   if (published) valid.forEach(id => current.add(id));
@@ -1311,10 +1341,35 @@ app.patch('/api/admin/products/badges', requireAdmin, async (req, res) => {
   res.json({ ok: true });
 });
 
+app.patch('/api/admin/products/argentina', requireAdmin, async (req, res) => {
+  const ids = [...new Set((Array.isArray(req.body?.ids) ? req.body.ids : []).map(String))];
+  const catalog = parseArgentinaCatalog(req.body?.catalog);
+  if (catalog == null) return res.status(400).json({ error: 'Elegí un catálogo de Argentina.' });
+  const updated = [];
+  const removed = [];
+  for (const id of ids) {
+    const p = PRODUCT_BY_ID.get(id);
+    if (!p || isLocalProduct(p)) continue;
+    setMeta(id, { argentinaCatalog: catalog });
+    if (!catalog) removed.push(id);
+    updated.push(productAdminView(p));
+  }
+  if (!updated.length) {
+    return res.status(400).json({ error: 'Elegí productos del catálogo de Brasil.' });
+  }
+  if (removed.length) {
+    const drop = new Set(removed);
+    db.publishedIds = db.publishedIds.filter(id => !drop.has(id));
+  }
+  await saveDb(db);
+  res.json({ products: updated, catalog });
+});
+
 app.patch('/api/admin/products/:id', requireAdmin, async (req, res) => {
   const p = PRODUCT_BY_ID.get(req.params.id);
   if (!p) return res.status(404).json({ error: 'Producto no encontrado' });
   const patch = {};
+  let clearArgentina = false;
   if (req.body?.badge != null) {
     const badge = parseBadge(req.body.badge);
     if (badge == null) return res.status(400).json({ error: 'Etiqueta inválida' });
@@ -1336,8 +1391,17 @@ app.patch('/api/admin/products/:id', requireAdmin, async (req, res) => {
     if (stock === null) return res.status(400).json({ error: 'Stock inválido' });
     if (stock !== undefined) patch.stock = stock;
   }
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, 'argentinaCatalog') && !isLocalProduct(p)) {
+    const catalog = parseArgentinaCatalog(req.body.argentinaCatalog);
+    if (catalog == null) return res.status(400).json({ error: 'Catálogo de Argentina inválido' });
+    patch.argentinaCatalog = catalog;
+    clearArgentina = !catalog;
+  }
   setMeta(p.id, patch);
-  if (Object.prototype.hasOwnProperty.call(req.body || {}, 'published') && isLocalProduct(p)) {
+  if (clearArgentina) {
+    db.publishedIds = db.publishedIds.filter(id => id !== p.id);
+  }
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, 'published') && isArgentinaProduct(p) && !clearArgentina) {
     const published = Boolean(req.body.published);
     const current = new Set(db.publishedIds);
     if (published) current.add(p.id);

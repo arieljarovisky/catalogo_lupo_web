@@ -19,7 +19,40 @@ function productOrigin(p) {
 }
 
 function productsInScope(scope = productScope) {
-  return products.filter(p => productOrigin(p) === scope);
+  if (scope === 'local') return products.filter(p => p.inArgentina);
+  return products.filter(p => productOrigin(p) === 'brasil');
+}
+
+function catalogNameFor(p, scope = productScope) {
+  if (scope === 'local' && p.argentinaCatalog) return p.argentinaCatalog;
+  return p.catalog;
+}
+
+const ARGENTINA_CATALOG_FALLBACK = [
+  'Boxers y Slips 2026',
+  'Lencería 2026',
+  'Medias 2026',
+  'Lupo Pijamas Invierno',
+  'Lupo Pijamas Verano'
+];
+
+function argentinaCatalogNames() {
+  const local = catalogs.filter(c => c.origin === 'local').map(c => c.name);
+  return local.length ? local : ARGENTINA_CATALOG_FALLBACK;
+}
+
+function argentinaCatalogOptionsHtml(selected = '', emptyLabel = 'Elegí un catálogo') {
+  return `<option value="">${escapeHtml(emptyLabel)}</option>` + argentinaCatalogNames().map(name =>
+    `<option value="${escapeHtml(name)}" ${selected === name ? 'selected' : ''}>${escapeHtml(catalogLabel(name))}</option>`
+  ).join('');
+}
+
+function fillArgentinaCatalogPick() {
+  const select = $('argentinaCatalogPick');
+  if (!select) return;
+  const current = select.value;
+  select.innerHTML = argentinaCatalogOptionsHtml(current, 'Catálogo de Argentina…');
+  if ([...select.options].some(opt => opt.value === current)) select.value = current;
 }
 
 function showFlash(text, err = false) {
@@ -41,7 +74,7 @@ function updateProductScopeUI() {
   if (blurb) {
     blurb.textContent = local
       ? 'Productos que importás y vendés a tus mayoristas. Publicar u ocultar define lo que ven tus clientes.'
-      : 'Línea completa de Lupo Brasil. No se publica al catálogo de clientes: se usa para pedir a fábrica en FOB.';
+      : 'Línea completa de Lupo Brasil. Elegí productos y agregalos a un catálogo de Argentina para venderlos a tus clientes. Siguen disponibles para pedidos FOB.';
   }
   document.querySelectorAll('[data-local-only]').forEach(el => { el.hidden = !local; });
   document.querySelectorAll('[data-brasil-only]').forEach(el => { el.hidden = local; });
@@ -65,8 +98,8 @@ function switchTab(tab) {
   document.querySelectorAll('.panel').forEach(panel => panel.classList.toggle('active', panel.id === `panel-${panelId}`));
 }
 
-function catalogOptionsHtml(list) {
-  const catalogNames = [...new Set(list.map(p => p.catalog))].sort((a, b) => {
+function catalogOptionsHtml(list, scope = productScope) {
+  const catalogNames = [...new Set(list.map(p => catalogNameFor(p, scope)))].sort((a, b) => {
     const al = LINGERIE_CATALOGS.has(a) ? 0 : 1;
     const bl = LINGERIE_CATALOGS.has(b) ? 0 : 1;
     if (al !== bl) return al - bl;
@@ -76,8 +109,20 @@ function catalogOptionsHtml(list) {
 }
 
 function fillCatalogFilters() {
-  if ($('productCatalogFilter')) $('productCatalogFilter').innerHTML = catalogOptionsHtml(productsInScope());
-  if ($('priceCatalogFilter')) $('priceCatalogFilter').innerHTML = catalogOptionsHtml(productsInScope('local'));
+  const productValue = $('productCatalogFilter')?.value || '';
+  const priceValue = $('priceCatalogFilter')?.value || '';
+  if ($('productCatalogFilter')) {
+    $('productCatalogFilter').innerHTML = catalogOptionsHtml(productsInScope(), productScope);
+    if ([...$('productCatalogFilter').options].some(opt => opt.value === productValue)) {
+      $('productCatalogFilter').value = productValue;
+    }
+  }
+  if ($('priceCatalogFilter')) {
+    $('priceCatalogFilter').innerHTML = catalogOptionsHtml(productsInScope('local'), 'local');
+    if ([...$('priceCatalogFilter').options].some(opt => opt.value === priceValue)) {
+      $('priceCatalogFilter').value = priceValue;
+    }
+  }
 }
 
 const LINGERIE_CATALOGS = new Set(['Lencería 2026', 'Lupo Lingerie PV 2026']);
@@ -87,14 +132,15 @@ function filteredProducts() {
   const catalog = $('productCatalogFilter')?.value || '';
   const fob = $('productFobFilter')?.value || '';
   return productsInScope().filter(p => {
-    if (catalog && p.catalog !== catalog) return false;
+    if (catalog && catalogNameFor(p) !== catalog) return false;
     if (fob === 'with' && !Number.isFinite(p.fobUsd)) return false;
     if (fob === 'without' && Number.isFinite(p.fobUsd)) return false;
-    const blob = normalizeText([p.code, translateText(p.name), catalogLabel(p.catalog), p.catalog, p.category].join(' '));
+    const shownCatalog = catalogNameFor(p);
+    const blob = normalizeText([p.code, translateText(p.name), catalogLabel(shownCatalog), shownCatalog, catalogLabel(p.catalog), p.catalog, p.category].join(' '));
     return !q || blob.includes(q);
   }).sort((a, b) => {
-    const al = LINGERIE_CATALOGS.has(a.catalog) ? 0 : 1;
-    const bl = LINGERIE_CATALOGS.has(b.catalog) ? 0 : 1;
+    const al = LINGERIE_CATALOGS.has(catalogNameFor(a)) ? 0 : 1;
+    const bl = LINGERIE_CATALOGS.has(catalogNameFor(b)) ? 0 : 1;
     if (al !== bl) return al - bl;
     const ao = Number.isFinite(a.sortOrder) ? a.sortOrder : Number.POSITIVE_INFINITY;
     const bo = Number.isFinite(b.sortOrder) ? b.sortOrder : Number.POSITIVE_INFINITY;
@@ -169,18 +215,24 @@ function renderProducts() {
   const local = productScope === 'local';
   $('productStats').textContent = local
     ? `${published} publicados · ${rows.length} en vista · ${scoped.length} en Argentina · ${withFob} con FOB`
-    : `${rows.length} en vista · ${scoped.length} en Brasil · ${withFob} con FOB`;
+    : `${rows.length} en vista · ${scoped.length} en Brasil · ${scoped.filter(p => p.inArgentina).length} también en Argentina · ${withFob} con FOB`;
+  if ($('selectBrasilProducts')) $('selectBrasilProducts').checked = false;
   $('productRows').innerHTML = rows.map(p => {
     const href = pdfHref(p);
     const orderVal = Number.isFinite(p.sortOrder) ? p.sortOrder : '';
+    const shownCatalog = catalogNameFor(p);
+    const catalogNote = productScope === 'local' && p.origin === 'brasil'
+      ? '<div class="muted" style="font-size:12px;">Desde Brasil</div>'
+      : (productScope === 'brasil' && p.inArgentina ? '<div class="mini-tag" style="margin-top:4px;">En Argentina</div>' : '');
     return `
     <tr data-product="${escapeHtml(p.id)}">
+      <td class="col-brasil-only"><input type="checkbox" data-pick="${escapeHtml(p.id)}"></td>
       <td class="col-local-only"><input type="checkbox" data-id="${escapeHtml(p.id)}" ${p.published ? 'checked' : ''}></td>
       <td><button class="thumb-edit" type="button" data-edit="${escapeHtml(p.id)}" title="Editar foto"><img class="thumb-mini" loading="lazy" decoding="async" src="${escapeHtml(adminImage(p))}" alt=""></button></td>
       <td class="col-local-only"><input class="sort-order-input" type="number" min="0" step="1" inputmode="numeric" data-sort="${escapeHtml(p.id)}" value="${escapeHtml(String(orderVal))}" placeholder="—" title="Menor número = aparece antes"></td>
       <td><b>${escapeHtml(p.code)}</b></td>
       <td>${escapeHtml(translateText(p.name))}</td>
-      <td>${escapeHtml(catalogLabel(p.catalog))}</td>
+      <td>${escapeHtml(catalogLabel(shownCatalog))}${catalogNote}</td>
       <td>${escapeHtml(formatFob(p.fobUsd))}</td>
       <td>${href ? `<a class="btn btn-ghost" href="${escapeHtml(href)}" target="_blank" rel="noopener">PDF</a>` : '—'}</td>
       <td class="col-local-only">
@@ -188,7 +240,10 @@ function renderProducts() {
         ${p.badge ? `<div class="mini-tag" style="${escapeHtml(labelPreviewStyle(labels.find(l => l.id === p.badge)))}">${escapeHtml(badgeLabel(p.badge, p.badgeText))}</div>` : ''}
       </td>
       <td class="col-local-only"><span class="status-pill ${p.published ? 'on' : 'off'}">${p.published ? 'Visible' : 'Oculto'}</span></td>
-      <td><button class="btn btn-ghost" type="button" data-edit="${escapeHtml(p.id)}">Editar</button></td>
+      <td>
+        <button class="btn btn-ghost" type="button" data-edit="${escapeHtml(p.id)}">Editar</button>
+        ${productScope === 'local' && p.origin === 'brasil' ? `<button class="btn btn-ghost" type="button" data-remove-argentina="${escapeHtml(p.id)}">Quitar</button>` : ''}
+      </td>
     </tr>`;
   }).join('');
 }
@@ -235,10 +290,16 @@ function fillEditor(p) {
   if ($('editorSortOrder')) $('editorSortOrder').value = Number.isFinite(p.sortOrder) ? p.sortOrder : '';
   $('restoreImageBtn').disabled = !p.hasCustomImage;
   $('restoreNameBtn').disabled = !p.hasCustomName;
-  const local = productOrigin(p) === 'local';
-  if ($('editorPublishedWrap')) $('editorPublishedWrap').hidden = !local;
+  const sellable = Boolean(p.inArgentina);
+  const fromBrasil = productOrigin(p) === 'brasil';
+  if ($('editorArgentinaField')) $('editorArgentinaField').hidden = !fromBrasil;
+  if ($('editorArgentinaCatalog')) {
+    $('editorArgentinaCatalog').innerHTML = argentinaCatalogOptionsHtml(p.argentinaCatalog || '', 'Solo en Brasil');
+    $('editorArgentinaCatalog').value = p.argentinaCatalog || '';
+  }
+  if ($('editorPublishedWrap')) $('editorPublishedWrap').hidden = !sellable;
   if ($('editorPublished')) $('editorPublished').checked = Boolean(p.published);
-  if ($('editorStockField')) $('editorStockField').hidden = !local;
+  if ($('editorStockField')) $('editorStockField').hidden = !sellable;
   renderEditorColors(p);
   renderEditorStock(p);
 }
@@ -278,7 +339,7 @@ function renderEditorColors(p) {
 function renderEditorStock(p) {
   const wrap = $('editorStockWrap');
   if (!wrap) return;
-  if (productOrigin(p) !== 'local') {
+  if (!p.inArgentina) {
     wrap.innerHTML = '';
     return;
   }
@@ -338,8 +399,23 @@ async function setVisibility(ids, published) {
   showFlash(published ? 'Productos publicados.' : 'Productos ocultados.');
 }
 
-function selectedProductIds() {
-  return [...document.querySelectorAll('#productRows input[type="checkbox"]:checked')].map(el => el.dataset.id);
+function pickedBrasilIds() {
+  return [...document.querySelectorAll('#productRows input[data-pick]:checked')].map(el => el.dataset.pick);
+}
+
+async function applyArgentinaCatalog(ids, catalog) {
+  if (!ids.length) {
+    showFlash('Seleccioná al menos un producto.', true);
+    return null;
+  }
+  const data = await api('/api/admin/products/argentina', { method: 'PATCH', body: { ids, catalog } });
+  const byId = new Map((data.products || []).map(p => [p.id, p]));
+  products = products.map(p => byId.has(p.id) ? { ...p, ...byId.get(p.id) } : p);
+  fillCatalogFilters();
+  renderProducts();
+  renderCatalogs();
+  if (editingId && byId.has(editingId)) fillEditor(products.find(p => p.id === editingId));
+  return data;
 }
 
 function fillListSelects() {
@@ -357,8 +433,9 @@ function filteredPriceProducts() {
   const q = normalizeText($('priceSearch').value);
   const catalog = $('priceCatalogFilter')?.value || '';
   return productsInScope('local').filter(p => {
-    if (catalog && p.catalog !== catalog) return false;
-    const blob = normalizeText([p.code, translateText(p.name), catalogLabel(p.catalog), p.catalog].join(' '));
+    const shownCatalog = catalogNameFor(p, 'local');
+    if (catalog && shownCatalog !== catalog) return false;
+    const blob = normalizeText([p.code, translateText(p.name), catalogLabel(shownCatalog), shownCatalog, p.catalog].join(' '));
     return !q || blob.includes(q);
   });
 }
@@ -451,6 +528,7 @@ async function init() {
   await refreshLabels();
   products = (await api('/api/admin/products')).products;
   catalogs = (await api('/api/admin/catalogs')).catalogs || [];
+  fillArgentinaCatalogPick();
   updateProductScopeUI();
   fillCatalogFilters();
   await refreshLists();
@@ -552,6 +630,13 @@ async function init() {
       .catch(err => showFlash(err.message, true));
   });
   $('productRows').addEventListener('click', e => {
+    const remove = e.target.closest('[data-remove-argentina]');
+    if (remove) {
+      applyArgentinaCatalog([remove.dataset.removeArgentina], '')
+        .then(data => { if (data) showFlash('Producto quitado de Argentina.'); })
+        .catch(err => showFlash(err.message, true));
+      return;
+    }
     const edit = e.target.closest('[data-edit]');
     if (edit) openEditor(edit.dataset.edit);
   });
@@ -662,7 +747,10 @@ async function init() {
         badgeText: $('editorBadgeText').value,
         sortOrder: $('editorSortOrder')?.value.trim() === '' ? null : Number($('editorSortOrder').value)
       };
-      if (p && productOrigin(p) === 'local') {
+      const fromBrasil = p && productOrigin(p) === 'brasil';
+      if (fromBrasil) body.argentinaCatalog = $('editorArgentinaCatalog')?.value || '';
+      const sellable = fromBrasil ? Boolean(body.argentinaCatalog) : Boolean(p?.inArgentina);
+      if (sellable) {
         body.stock = readEditorStock();
         body.published = Boolean($('editorPublished')?.checked);
       }
@@ -671,7 +759,9 @@ async function init() {
         body
       });
       upsertProduct(data.product);
+      fillCatalogFilters();
       renderProducts();
+      renderCatalogs();
       showFlash('Cambios guardados.');
     } catch (err) { showFlash(err.message, true); }
   });
@@ -680,6 +770,40 @@ async function init() {
   });
   $('hideFiltered').addEventListener('click', () => {
     setVisibility(filteredProducts().map(p => p.id), false).catch(err => showFlash(err.message, true));
+  });
+  $('selectBrasilProducts')?.addEventListener('change', () => {
+    const checked = $('selectBrasilProducts').checked;
+    document.querySelectorAll('#productRows input[data-pick]').forEach(box => { box.checked = checked; });
+  });
+  $('editorArgentinaCatalog')?.addEventListener('change', () => {
+    const p = products.find(x => x.id === editingId);
+    if (!p) return;
+    const chosen = $('editorArgentinaCatalog').value;
+    const show = Boolean(chosen);
+    if ($('editorStockField')) $('editorStockField').hidden = !show;
+    if ($('editorPublishedWrap')) $('editorPublishedWrap').hidden = !show;
+    if (show) renderEditorStock({ ...p, inArgentina: true });
+    else if ($('editorStockWrap')) $('editorStockWrap').innerHTML = '';
+  });
+  $('addToArgentina')?.addEventListener('click', async () => {
+    const catalog = $('argentinaCatalogPick')?.value || '';
+    if (!catalog) return showFlash('Elegí el catálogo de Argentina.', true);
+    try {
+      const data = await applyArgentinaCatalog(pickedBrasilIds(), catalog);
+      if (!data) return;
+      const n = data.products.length;
+      showFlash(`${n} producto${n === 1 ? '' : 's'} agregado${n === 1 ? '' : 's'} a ${catalogLabel(catalog)}. Quedan ocultos hasta que los publiques.`);
+    } catch (err) { showFlash(err.message, true); }
+  });
+  $('removeFromArgentina')?.addEventListener('click', async () => {
+    const ids = pickedBrasilIds().filter(id => products.find(p => p.id === id)?.inArgentina);
+    if (!ids.length) return showFlash('Seleccioná productos que ya estén en Argentina.', true);
+    if (!confirm('¿Quitar los productos seleccionados del catálogo de Argentina?')) return;
+    try {
+      const data = await applyArgentinaCatalog(ids, '');
+      if (!data) return;
+      showFlash('Productos quitados de Argentina.');
+    } catch (err) { showFlash(err.message, true); }
   });
 
   $('newListForm').addEventListener('submit', async e => {

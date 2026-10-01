@@ -690,6 +690,8 @@ body.admin-brasil-scope .admin-scope-blurb {
   border-color: #c5d8e4;
 }
 body.admin-brasil-scope .col-local-only { display: none; }
+.col-brasil-only { display: none; }
+body.admin-brasil-scope .col-brasil-only { display: table-cell; }
 .admin-section-title {
   margin: 22px 0 4px;
   font-size: 16px;
