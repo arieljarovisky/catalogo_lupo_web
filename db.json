@@ -546,6 +546,14 @@
         "P (36 a 38)|8000": 2,
         "GG (48 a 50)|8000": 2
       }
+    },
+    "lenceria-2026-41805-001-20": {
+      "extraColors": [
+        {
+          "code": "NATURAL",
+          "name": "Natural"
+        }
+      ]
     }
   },
   "customLabels": [
