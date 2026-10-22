@@ -249,19 +249,15 @@ function normalizeDb(parsed) {
       if (!validIds.has(id)) delete list.prices[id];
     }
   }
-  const octubrePath = path.join(ROOT, 'octubre-2026-capital-prices.json');
   const agostoPath = path.join(ROOT, 'agosto-2026-capital-prices.json');
-  const seedPath = fs.existsSync(octubrePath)
-    ? octubrePath
-    : (fs.existsSync(agostoPath) ? agostoPath : path.join(ROOT, 'multilupo-prices.json'));
+  const seedPath = fs.existsSync(agostoPath) ? agostoPath : path.join(ROOT, 'multilupo-prices.json');
   const mayorista = data.priceLists.find(l => l.id === 'lista-mayorista') || data.priceLists[0];
   if (mayorista && Object.keys(mayorista.prices).length === 0 && fs.existsSync(seedPath)) {
     const seed = JSON.parse(fs.readFileSync(seedPath, 'utf8'));
     for (const [id, price] of Object.entries(seed)) {
       if (validIds.has(id) && Number.isFinite(price)) mayorista.prices[id] = price;
     }
-    if (fs.existsSync(octubrePath)) mayorista.name = 'Octubre 2026';
-    else if (fs.existsSync(agostoPath)) mayorista.name = 'Agosto 2026 Capital';
+    if (fs.existsSync(agostoPath)) mayorista.name = 'Agosto 2026 Capital';
   }
   if (!data.users.length) {
     const seeded = seedDb();

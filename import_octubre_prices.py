@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Importar lista de precios Octubre 2026 desde el PDF mayorista."""
+"""Importar lista de precios Octubre 2026 Interior desde el PDF (precios tal cual)."""
 
 from __future__ import annotations
 
@@ -23,19 +23,12 @@ CODE_ALIASES = {
 }
 
 PRESETS = {
-    "capital": {
-        "list_id": "lista-mayorista",
-        "list_name": "Octubre 2026",
-        "out_json": "octubre-2026-capital-prices.json",
-        "multiplier": 1.0,
-        "replace_seed": True,
-    },
     "interior": {
         "list_id": "lista-interior",
         "list_name": "Octubre 2026 Interior",
         "out_json": "octubre-2026-interior-prices.json",
-        # Misma diferencia histórica Capital → Interior (+4%).
-        "multiplier": 1.04,
+        # La lista del PDF ya es Interior: no aplicar recargo.
+        "multiplier": 1.0,
         "replace_seed": True,
     },
 }
@@ -205,8 +198,8 @@ def main():
         "preset",
         nargs="?",
         choices=sorted(PRESETS),
-        default="capital",
-        help="Lista a importar (default: capital)",
+        default="interior",
+        help="Lista a importar (default: interior)",
     )
     parser.add_argument("--pdf", type=Path, default=DEFAULT_PDF, help="Ruta al PDF")
     parser.add_argument("--list-id", help="ID de la lista en db.json")
