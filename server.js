@@ -11,6 +11,8 @@ const {
   fetchRemoteDb,
   saveRemoteDb
 } = require('./lib/db-remote');
+const { buildXlsx } = require('./lib/xlsx');
+const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 const ROOT = __dirname;
 const IS_VERCEL = Boolean(process.env.VERCEL);
@@ -622,19 +624,42 @@ async function deleteUpload(relPath) {
   }
 }
 
-async function persistOrder(token, filename, xml) {
+async function persistOrder(token, filename, content) {
   fs.mkdirSync(ORDERS_DIR, { recursive: true });
-  fs.writeFileSync(path.join(ORDERS_DIR, `${token}.xls`), xml, 'utf8');
+  const buffer = Buffer.isBuffer(content) ? content : Buffer.from(String(content), 'utf8');
+  const ext = Buffer.isBuffer(content) ? 'xlsx' : 'xls';
+  fs.writeFileSync(path.join(ORDERS_DIR, `${token}.${ext}`), buffer);
+  fs.writeFileSync(
+    path.join(ORDERS_DIR, `${token}.meta.json`),
+    JSON.stringify({ filename: filename || `pedido-lupo.${ext}` })
+  );
 }
 
 async function readOrder(token) {
-  const file = path.join(ORDERS_DIR, `${token}.xls`);
-  if (!fs.existsSync(file)) return null;
-  return {
-    token,
-    filename: 'pedido-lupo.xls',
-    content: fs.readFileSync(file, 'utf8')
-  };
+  const metaPath = path.join(ORDERS_DIR, `${token}.meta.json`);
+  let meta = null;
+  if (fs.existsSync(metaPath)) {
+    try { meta = JSON.parse(fs.readFileSync(metaPath, 'utf8')); } catch {}
+  }
+  const xlsxPath = path.join(ORDERS_DIR, `${token}.xlsx`);
+  if (fs.existsSync(xlsxPath)) {
+    return {
+      token,
+      filename: meta?.filename || 'pedido-lupo.xlsx',
+      content: fs.readFileSync(xlsxPath),
+      mime: XLSX_MIME
+    };
+  }
+  const xlsPath = path.join(ORDERS_DIR, `${token}.xls`);
+  if (fs.existsSync(xlsPath)) {
+    return {
+      token,
+      filename: meta?.filename || 'pedido-lupo.xls',
+      content: fs.readFileSync(xlsPath),
+      mime: 'application/vnd.ms-excel; charset=utf-8'
+    };
+  }
+  return null;
 }
 
 function parseBadge(raw) {
@@ -781,19 +806,6 @@ function adminCatalogSummaries() {
   });
 }
 
-function escapeXml(value) {
-  return (value ?? '').toString()
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-function formatMoneyPlain(value) {
-  if (!Number.isFinite(value)) return '';
-  return value.toFixed(2);
-}
-
 const IVA_RATE = 0.21;
 
 function orderTotalsArs(items) {
@@ -806,7 +818,7 @@ function orderTotalsArs(items) {
   return { subtotal, iva, total };
 }
 
-function buildOrderExcelXml({ clientName, username, items, notes, currency = 'ARS' }) {
+function buildOrderExcelRows({ clientName, username, items, notes, currency = 'ARS' }) {
   const isFob = currency === 'USD';
   const priceKey = isFob ? 'fobUsd' : 'priceArs';
   const priceLabel = isFob ? 'Precio FOB USD' : 'Precio ARS';
@@ -816,14 +828,15 @@ function buildOrderExcelXml({ clientName, username, items, notes, currency = 'AR
     const price = Number.isFinite(item[priceKey]) ? item[priceKey] : null;
     const total = price != null ? price * Number(item.qty || 0) : null;
     const color = item.colorName || item.colorCode || '';
+    const qty = Number(item.qty || 0);
     return [
       item.code,
       item.name || '',
       item.size || '',
       color,
-      String(item.qty),
-      formatMoneyPlain(price),
-      formatMoneyPlain(total)
+      Number.isFinite(qty) ? qty : 0,
+      price != null ? Number(price.toFixed(2)) : '',
+      total != null ? Number(total.toFixed(2)) : ''
     ];
   });
   const qtyTotal = items.reduce((sum, item) => sum + Number(item.qty || 0), 0);
@@ -836,38 +849,32 @@ function buildOrderExcelXml({ clientName, username, items, notes, currency = 'AR
     ['Usuario', username],
     ['Tipo', isFob ? 'Pedido Brasil (FOB)' : 'Pedido mayorista'],
     ['Fecha', new Date().toLocaleString('es-AR')],
-    ['Unidades', String(qtyTotal)]
+    ['Unidades', qtyTotal]
   ];
   if (isFob) {
-    info.push([totalLabel, formatMoneyPlain(moneyTotal)]);
+    info.push([totalLabel, Number(moneyTotal.toFixed(2))]);
   } else {
     const { subtotal, iva, total } = orderTotalsArs(items);
     info.push(
-      ['Subtotal ARS', formatMoneyPlain(subtotal)],
-      ['IVA 21%', formatMoneyPlain(iva)],
-      ['Total con IVA', formatMoneyPlain(total)]
+      ['Subtotal ARS', Number(subtotal.toFixed(2))],
+      ['IVA 21%', Number(iva.toFixed(2))],
+      ['Total con IVA', Number(total.toFixed(2))]
     );
   }
   info.push(['Notas', notes || '']);
-  const allRows = [...info, [], header, ...body];
-  const numberCols = new Set([4, 5, 6]);
-  const xmlRows = allRows.map((row, rowIndex) => {
-    const isItem = rowIndex > info.length + 1;
-    const cells = row.map((cell, colIndex) => {
-      const isNumber = isItem && numberCols.has(colIndex) && cell !== '';
-      const type = isNumber ? 'Number' : 'String';
-      return `<Cell><Data ss:Type="${type}">${escapeXml(cell)}</Data></Cell>`;
-    }).join('');
-    return `<Row>${cells}</Row>`;
-  }).join('');
-  return `<?xml version="1.0"?>
-<?mso-application progid="Excel.Sheet"?>
-<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
- <Worksheet ss:Name="Pedido">
-  <Table>${xmlRows}</Table>
- </Worksheet>
-</Workbook>`;
+  return [...info, [], header, ...body];
+}
+
+function buildOrderExcelXlsx(opts) {
+  return buildXlsx(buildOrderExcelRows(opts));
+}
+
+function orderExcelPayload(filename, buffer) {
+  return {
+    filename,
+    mime: XLSX_MIME,
+    xlsxBase64: buffer.toString('base64')
+  };
 }
 
 function publicBaseUrl(req) {
@@ -1182,14 +1189,14 @@ app.post('/api/orders', requireAuth, async (req, res) => {
   const validationError = validateOrderInput(incoming, items);
   if (validationError) return res.status(400).json({ error: validationError });
   const token = crypto.randomBytes(16).toString('hex');
-  const filename = `pedido-lupo-${new Date().toISOString().slice(0, 10)}-${token.slice(0, 6)}.xls`;
-  const xml = buildOrderExcelXml({
+  const filename = `pedido-lupo-${new Date().toISOString().slice(0, 10)}-${token.slice(0, 6)}.xlsx`;
+  const xlsx = buildOrderExcelXlsx({
     clientName: req.user.name || req.user.username,
     username: req.user.username,
     items,
     notes
   });
-  await persistOrder(token, filename, xml);
+  await persistOrder(token, filename, xlsx);
   const excelUrl = `${publicBaseUrl(req)}/pedido/${token}`;
   const qtyTotal = items.reduce((sum, item) => sum + item.qty, 0);
   const { subtotal, iva, total } = orderTotalsArs(items);
@@ -1212,11 +1219,10 @@ app.post('/api/orders', requireAuth, async (req, res) => {
     : '';
   res.json({
     token,
-    filename,
     excelUrl,
     whatsappUrl,
     message,
-    xml
+    ...orderExcelPayload(filename, xlsx)
   });
   } catch (err) {
     console.error('POST /api/orders', err);
@@ -1231,14 +1237,14 @@ app.post('/api/orders/export', requireAuth, (req, res) => {
     const items = parseMayoristaOrderItems(incoming);
     const validationError = validateOrderInput(incoming, items);
     if (validationError) return res.status(400).json({ error: validationError });
-    const filename = `pedido-lupo-${new Date().toISOString().slice(0, 10)}.xls`;
-    const xml = buildOrderExcelXml({
+    const filename = `pedido-lupo-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    const xlsx = buildOrderExcelXlsx({
       clientName: req.user.name || req.user.username,
       username: req.user.username,
       items,
       notes
     });
-    res.json({ filename, xml });
+    res.json(orderExcelPayload(filename, xlsx));
   } catch (err) {
     console.error('POST /api/orders/export', err);
     res.status(500).json({ error: err.message || 'No se pudo exportar el pedido.' });
@@ -1251,8 +1257,10 @@ async function sendOrderExcel(req, res) {
     if (token.length < 16) return res.status(404).end();
     const order = await readOrder(token);
     if (!order?.content) return res.status(404).end();
-    res.setHeader('Content-Type', 'application/vnd.ms-excel; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="${order.filename || 'pedido-lupo.xls'}"`);
+    const filename = order.filename || 'pedido-lupo.xlsx';
+    res.setHeader('Content-Type', order.mime || XLSX_MIME);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Cache-Control', 'private, no-store');
     res.send(order.content);
   } catch (err) {
     console.error('sendOrderExcel', err);
@@ -1305,15 +1313,15 @@ app.post('/api/admin/orders-brasil', requireAdmin, async (req, res) => {
   const validationError = validateOrderInput(incoming, items);
   if (validationError) return res.status(400).json({ error: validationError });
   const token = crypto.randomBytes(16).toString('hex');
-  const filename = `pedido-brasil-${new Date().toISOString().slice(0, 10)}-${token.slice(0, 6)}.xls`;
-  const xml = buildOrderExcelXml({
+  const filename = `pedido-brasil-${new Date().toISOString().slice(0, 10)}-${token.slice(0, 6)}.xlsx`;
+  const xlsx = buildOrderExcelXlsx({
     clientName: req.user.name || req.user.username,
     username: req.user.username,
     items,
     notes,
     currency: 'USD'
   });
-  await persistOrder(token, filename, xml);
+  await persistOrder(token, filename, xlsx);
   const excelUrl = `${publicBaseUrl(req)}/pedido/${token}`;
   const qtyTotal = items.reduce((sum, item) => sum + item.qty, 0);
   const moneyTotal = items.reduce((sum, item) => sum + (Number.isFinite(item.fobUsd) ? item.fobUsd * item.qty : 0), 0);
@@ -1334,11 +1342,10 @@ app.post('/api/admin/orders-brasil', requireAdmin, async (req, res) => {
     : '';
   res.json({
     token,
-    filename,
     excelUrl,
     whatsappUrl,
     message,
-    xml
+    ...orderExcelPayload(filename, xlsx)
   });
   } catch (err) {
     console.error('POST /api/admin/orders-brasil', err);
@@ -1353,15 +1360,15 @@ app.post('/api/admin/orders-brasil/export', requireAdmin, (req, res) => {
     const items = parseBrasilOrderItems(incoming);
     const validationError = validateOrderInput(incoming, items);
     if (validationError) return res.status(400).json({ error: validationError });
-    const filename = `pedido-brasil-${new Date().toISOString().slice(0, 10)}.xls`;
-    const xml = buildOrderExcelXml({
+    const filename = `pedido-brasil-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    const xlsx = buildOrderExcelXlsx({
       clientName: req.user.name || req.user.username,
       username: req.user.username,
       items,
       notes,
       currency: 'USD'
     });
-    res.json({ filename, xml });
+    res.json(orderExcelPayload(filename, xlsx));
   } catch (err) {
     console.error('POST /api/admin/orders-brasil/export', err);
     res.status(500).json({ error: err.message || 'No se pudo exportar el pedido.' });

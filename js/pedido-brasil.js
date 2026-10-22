@@ -153,12 +153,25 @@
       </article>`;
     }).join('');
   }
-  function downloadExcelFile(xml, filename) {
-    const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+  const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+  function excelBytesFromResponse(data) {
+    const b64 = data?.xlsxBase64;
+    if (!b64) return null;
+    const binary = atob(b64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  }
+
+  function downloadExcelFile(data) {
+    const bytes = excelBytesFromResponse(data);
+    if (!bytes) return;
+    const blob = new Blob([bytes], { type: data.mime || XLSX_MIME });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = filename || 'pedido-brasil.xls';
+    a.download = data.filename || 'pedido-brasil.xlsx';
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -176,16 +189,19 @@
         window.open(data.whatsappUrl, '_blank', 'noopener');
         return;
       }
-      const file = new File([data.xml], data.filename || 'pedido-brasil.xls', { type: 'application/vnd.ms-excel' });
-      try {
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          await navigator.share({ files: [file], title: 'Pedido Brasil Lupo', text: data.message });
-          return;
+      const bytes = excelBytesFromResponse(data);
+      if (bytes) {
+        const file = new File([bytes], data.filename || 'pedido-brasil.xlsx', { type: data.mime || XLSX_MIME });
+        try {
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({ files: [file], title: 'Pedido Brasil Lupo', text: data.message });
+            return;
+          }
+        } catch (err) {
+          if (err.name === 'AbortError') return;
         }
-      } catch (err) {
-        if (err.name === 'AbortError') return;
+        downloadExcelFile(data);
       }
-      if (data.xml) downloadExcelFile(data.xml, data.filename);
       window.open(`https://wa.me/?text=${encodeURIComponent(data.message || 'Pedido Brasil Lupo')}`, '_blank', 'noopener');
       showFlash('Configurá WhatsApp en Administración para envío directo.', true);
     } catch (err) {

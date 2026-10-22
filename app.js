@@ -1235,12 +1235,26 @@ function clearCart() {
   renderCart();
 }
 
-function downloadExcelFile(xml, filename) {
-  const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+function excelBytesFromResponse(data) {
+  const b64 = data?.xlsxBase64;
+  if (!b64) return null;
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+function downloadExcelFile(data, fallbackName) {
+  const bytes = excelBytesFromResponse(data);
+  if (!bytes) return;
+  const filename = data.filename || fallbackName || 'pedido-lupo.xlsx';
+  const blob = new Blob([bytes], { type: data.mime || XLSX_MIME });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = filename || `pedido-lupo.xls`;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -1260,7 +1274,7 @@ async function downloadOrderExcel() {
       method: 'POST',
       body: { items: cart, notes: cartNotes }
     });
-    if (data.xml) downloadExcelFile(data.xml, data.filename);
+    if (data.xlsxBase64) downloadExcelFile(data, brasilMode ? 'pedido-brasil.xlsx' : 'pedido-lupo.xlsx');
   } catch (err) {
     alert(err.message || 'No se pudo descargar el Excel.');
   } finally {
@@ -1287,16 +1301,19 @@ async function sendOrderWhatsapp() {
       window.open(data.whatsappUrl, '_blank', 'noopener');
       return;
     }
-    const file = new File([data.xml], data.filename || (brasilMode ? 'pedido-brasil.xls' : 'pedido-lupo.xls'), { type: 'application/vnd.ms-excel' });
-    try {
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: brasilMode ? 'Pedido Brasil Lupo' : 'Pedido Lupo', text: data.message });
-        return;
+    const bytes = excelBytesFromResponse(data);
+    if (bytes) {
+      const file = new File([bytes], data.filename || (brasilMode ? 'pedido-brasil.xlsx' : 'pedido-lupo.xlsx'), { type: data.mime || XLSX_MIME });
+      try {
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title: brasilMode ? 'Pedido Brasil Lupo' : 'Pedido Lupo', text: data.message });
+          return;
+        }
+      } catch (err) {
+        if (err.name === 'AbortError') return;
       }
-    } catch (err) {
-      if (err.name === 'AbortError') return;
+      downloadExcelFile(data, brasilMode ? 'pedido-brasil.xlsx' : 'pedido-lupo.xlsx');
     }
-    if (data.xml) downloadExcelFile(data.xml, data.filename);
     const text = encodeURIComponent(data.message || (brasilMode ? 'Pedido Brasil Lupo' : 'Pedido Lupo'));
     window.open(`https://wa.me/?text=${text}`, '_blank', 'noopener');
     alert('Configurá tu número de WhatsApp en Administración para que el pedido te llegue directo.');
