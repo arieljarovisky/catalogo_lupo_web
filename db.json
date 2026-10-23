@@ -35,19 +35,10 @@
       "priceListId": "lista-mayorista",
       "passwordHash": "01f63dcfcd3514330ac8af5002d46ec1:10c5375b85e4f030d388f0dfd593cb12c3aa901d1c3930b8a986923e3656551d7692170198e490004463bda68c1ec91ece7f66ce73fe20c79fd7e60e084d894b",
       "discountPercent": 0
-    },
-    {
-      "id": "e17ef272d5de3abb",
-      "username": "sportiva",
-      "name": "Indumenti sportiva",
-      "passwordHash": "64daf6f82cf40fe3e3ba06d9d6d561d7:8c5c13197bede76718f7e5fff3d63496789ff2a1b2d9f81ead33800c4a8a17e29b9528181836c38c9b042b1785b8ebd311e3f1db41d99aedb3867e52c7b1c91c",
-      "role": "cliente",
-      "priceListId": "lista-interior",
-      "discountPercent": 0
     }
   ],
   "settings": {
-    "whatsappNumber": "5491170590570"
+    "whatsappNumber": "5491154616161"
   },
   "priceLists": [
     {
