@@ -35,6 +35,15 @@
       "priceListId": "lista-mayorista",
       "passwordHash": "01f63dcfcd3514330ac8af5002d46ec1:10c5375b85e4f030d388f0dfd593cb12c3aa901d1c3930b8a986923e3656551d7692170198e490004463bda68c1ec91ece7f66ce73fe20c79fd7e60e084d894b",
       "discountPercent": 0
+    },
+    {
+      "id": "4cb76d1351e91fbc",
+      "username": "sportiva",
+      "name": "Sportiva",
+      "passwordHash": "9690bd630f294f35d08a087793bf98da:081af8bf0b9b3088deb74e0f855b95c3e958410d21e957288c3bc8973bb5ae741a437ccbcfea7c41186f5082cae76b070f68f925b8174718e88b36aad2a5968d",
+      "role": "cliente",
+      "priceListId": "lista-interior",
+      "discountPercent": 0
     }
   ],
   "settings": {
