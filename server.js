@@ -11,6 +11,12 @@ const {
   fetchRemoteDb,
   saveRemoteDb
 } = require('./lib/db-remote');
+const {
+  USE_REMOTE_FILES,
+  putRemoteFile,
+  getRemoteFile,
+  deleteRemoteFile
+} = require('./lib/files-remote');
 const { buildXlsx } = require('./lib/xlsx');
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
@@ -601,12 +607,22 @@ async function saveDataUrl(productId, dataUrl, suffix = '') {
   const safeSuffix = String(suffix || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40);
   const filename = `${safeId}${safeSuffix ? `-${safeSuffix}` : ''}-${Date.now()}.${ext}`;
 
-  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-  const abs = path.join(UPLOADS_DIR, filename);
+  if (USE_REMOTE_FILES) {
+    // Copia permanente en la rama `data` (en Vercel /tmp se pierde en cada cold start).
+    try {
+      await putRemoteFile(`uploads/${filename}`, buf, `chore: subir foto ${filename}`);
+    } catch (err) {
+      return { error: `No se pudo guardar la imagen: ${err.message}` };
+    }
+  } else if (IS_VERCEL) {
+    return { error: 'En producción falta GITHUB_TOKEN: no se pueden guardar fotos.' };
+  }
   try {
-    fs.writeFileSync(abs, buf);
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+    fs.writeFileSync(path.join(UPLOADS_DIR, filename), buf);
   } catch (err) {
-    return { error: `No se pudo guardar la imagen: ${err.message}` };
+    // Con copia remota el disco es solo caché; sin ella, es un error real.
+    if (!USE_REMOTE_FILES) return { error: `No se pudo guardar la imagen: ${err.message}` };
   }
   return { path: IS_VERCEL ? `/assets/uploads/${filename}` : `assets/uploads/${filename}` };
 }
@@ -622,17 +638,76 @@ async function deleteUpload(relPath) {
   if (abs.startsWith(UPLOADS_DIR) && fs.existsSync(abs)) {
     try { fs.unlinkSync(abs); } catch {}
   }
+  if (USE_REMOTE_FILES && /^[a-zA-Z0-9_.-]+$/.test(filename)) {
+    try {
+      await deleteRemoteFile(`uploads/${filename}`);
+    } catch (err) {
+      console.warn('No se pudo borrar la foto remota:', err.message);
+    }
+  }
+}
+
+const UPLOAD_MIME = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif' };
+
+async function sendRemoteUpload(req, res, next) {
+  if (!USE_REMOTE_FILES || (req.method !== 'GET' && req.method !== 'HEAD')) return next();
+  const filename = path.basename(decodeURIComponent(String(req.path || '')));
+  const ext = filename.split('.').pop().toLowerCase();
+  if (!/^[a-zA-Z0-9_.-]+$/.test(filename) || !UPLOAD_MIME[ext]) return next();
+  try {
+    const buf = await getRemoteFile(`uploads/${filename}`);
+    if (!buf) return next();
+    try {
+      fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+      fs.writeFileSync(path.join(UPLOADS_DIR, filename), buf);
+    } catch {}
+    res.setHeader('Content-Type', UPLOAD_MIME[ext]);
+    // El nombre lleva timestamp, así que el archivo nunca cambia: el CDN de Vercel puede cachearlo.
+    res.setHeader('Cache-Control', 'public, max-age=2592000, s-maxage=31536000, immutable');
+    return res.send(buf);
+  } catch (err) {
+    console.warn('No se pudo leer la foto remota:', err.message);
+    return next();
+  }
 }
 
 async function persistOrder(token, filename, content) {
-  fs.mkdirSync(ORDERS_DIR, { recursive: true });
   const buffer = Buffer.isBuffer(content) ? content : Buffer.from(String(content), 'utf8');
   const ext = Buffer.isBuffer(content) ? 'xlsx' : 'xls';
-  fs.writeFileSync(path.join(ORDERS_DIR, `${token}.${ext}`), buffer);
-  fs.writeFileSync(
-    path.join(ORDERS_DIR, `${token}.meta.json`),
-    JSON.stringify({ filename: filename || `pedido-lupo.${ext}` })
-  );
+  const meta = Buffer.from(JSON.stringify({ filename: filename || `pedido-lupo.${ext}` }));
+  if (USE_REMOTE_FILES) {
+    // Sin esto, el link de WhatsApp al Excel deja de andar en el próximo cold start de Vercel.
+    await putRemoteFile(`orders/${token}.${ext}`, buffer, `chore: pedido ${token.slice(0, 6)}`);
+    await putRemoteFile(`orders/${token}.meta.json`, meta, `chore: pedido ${token.slice(0, 6)} meta`);
+  }
+  try {
+    fs.mkdirSync(ORDERS_DIR, { recursive: true });
+    fs.writeFileSync(path.join(ORDERS_DIR, `${token}.${ext}`), buffer);
+    fs.writeFileSync(path.join(ORDERS_DIR, `${token}.meta.json`), meta);
+  } catch (err) {
+    if (!USE_REMOTE_FILES) throw err;
+  }
+}
+
+async function readRemoteOrder(token) {
+  if (!USE_REMOTE_FILES) return null;
+  let meta = null;
+  try {
+    const raw = await getRemoteFile(`orders/${token}.meta.json`);
+    if (raw) meta = JSON.parse(raw.toString('utf8'));
+  } catch {}
+  const xlsx = await getRemoteFile(`orders/${token}.xlsx`);
+  if (xlsx) return { token, filename: meta?.filename || 'pedido-lupo.xlsx', content: xlsx, mime: XLSX_MIME };
+  const xls = await getRemoteFile(`orders/${token}.xls`);
+  if (xls) {
+    return {
+      token,
+      filename: meta?.filename || 'pedido-lupo.xls',
+      content: xls,
+      mime: 'application/vnd.ms-excel; charset=utf-8'
+    };
+  }
+  return null;
 }
 
 async function readOrder(token) {
@@ -659,7 +734,7 @@ async function readOrder(token) {
       mime: 'application/vnd.ms-excel; charset=utf-8'
     };
   }
-  return null;
+  return readRemoteOrder(token);
 }
 
 function parseBadge(raw) {
@@ -997,6 +1072,7 @@ app.get('/api/health', async (req, res) => {
     return res.json({
       ok: true,
       persistencia: USE_REMOTE_DB ? 'db.json-remoto' : 'db.json',
+      archivos: USE_REMOTE_FILES ? 'github-data' : (IS_VERCEL ? 'tmp-temporal' : 'disco-local'),
       puedeGuardar: USE_REMOTE_DB || !IS_VERCEL
     });
   } catch (err) {
@@ -1019,6 +1095,7 @@ const staticImageHeaders = {
 };
 app.use('/orders', express.static(path.join(ROOT, 'orders')));
 app.use('/assets/uploads', express.static(UPLOADS_DIR, staticImageHeaders));
+app.use('/assets/uploads', sendRemoteUpload);
 app.use('/assets', express.static(path.join(ROOT, 'assets'), staticImageHeaders));
 app.use('/pdfs', express.static(path.join(ROOT, 'pdfs'), { maxAge: '7d' }));
 app.use('/js', express.static(path.join(ROOT, 'js'), { maxAge: '1d' }));
