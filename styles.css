@@ -1590,3 +1590,10 @@ body.brasil-mode .topbar span:nth-child(2) { font-weight: 800; }
   .thumb-mini { width: 36px; height: 36px; }
 }
 
+
+/* Visitantes sin usuario: catálogo sin precios */
+.guest-cta { margin: 16px 0; padding: 16px; border: 1px solid var(--line); background: var(--soft); border-radius: var(--radius); display: grid; gap: 10px; }
+.guest-cta p { margin: 0; line-height: 1.5; }
+.guest-mode .price { color: var(--muted); font-size: 14px; font-weight: 500; }
+.login-alt { margin-top: 16px; font-size: 13px; color: var(--muted); }
+.login-alt a { color: inherit; text-decoration: underline; }

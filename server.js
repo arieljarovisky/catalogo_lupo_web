@@ -11,6 +11,7 @@ const {
   fetchRemoteDb,
   saveRemoteDb
 } = require('./lib/db-remote');
+const { USE_PG, fetchPgDb, savePgDb } = require('./lib/db-postgres');
 const { buildXlsx } = require('./lib/xlsx');
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
@@ -27,7 +28,7 @@ const DEFAULT_LABELS = [
   { id: 'sale', name: 'Liquidación', color: '#c45c00', promoTab: true }
 ];
 
-if (IS_VERCEL && !USE_REMOTE_DB) {
+if (IS_VERCEL && !USE_PG && !USE_REMOTE_DB) {
   console.warn('Falta GITHUB_TOKEN: en Vercel el admin no puede guardar usuarios/precios.');
 }
 
@@ -284,7 +285,26 @@ function saveDbToFile(data) {
   fs.renameSync(tmp, DB_PATH);
 }
 
+async function loadDbFromPg() {
+  const stored = await fetchPgDb();
+  if (stored) return normalizeDb(stored);
+  // Primera vez: migrar desde el db.json remoto (rama data) o el local.
+  let source = null;
+  if (USE_REMOTE_DB) {
+    try {
+      source = await fetchRemoteDb();
+    } catch (err) {
+      console.warn('No se pudo leer db.json remoto para migrar:', err.message);
+    }
+  }
+  const data = normalizeDb(source || loadDbFromFile());
+  await savePgDb(data);
+  console.log(`Base Postgres inicializada desde ${source ? 'db.json remoto' : 'db.json local'}.`);
+  return data;
+}
+
 async function loadDb() {
+  if (USE_PG) return loadDbFromPg();
   // Una sola base: si hay GITHUB_TOKEN, local y prod usan el mismo db.json remoto.
   if (USE_REMOTE_DB) {
     let remote = null;
@@ -317,13 +337,18 @@ async function loadDb() {
 async function saveDb(data) {
   db = data;
   try {
+    if (USE_PG) {
+      await savePgDb(data);
+      dbLoadedAt = Date.now();
+      return;
+    }
     if (USE_REMOTE_DB) {
       await saveRemoteDb(data);
       if (!IS_VERCEL) saveDbToFile(data);
       return;
     }
     if (IS_VERCEL) {
-      throw new Error('En producción falta GITHUB_TOKEN: no se pueden guardar cambios. Configuralo en Vercel.');
+      throw new Error('En producción falta DATABASE_URL: no se pueden guardar cambios. Configuralo en Vercel.');
     }
     saveDbToFile(data);
   } catch (err) {
@@ -333,9 +358,11 @@ async function saveDb(data) {
 }
 
 let db = seedDb();
+let dbLoadedAt = 0;
 const dbReady = loadDb()
   .then(data => {
     db = data;
+    dbLoadedAt = Date.now();
     return db;
   })
   .catch(err => {
@@ -364,10 +391,29 @@ function sendGzipJson(req, res, payload) {
   return res.send(json);
 }
 
+// Con Postgres, cada instancia de Vercel vuelve a leer la base si su copia
+// tiene más de unos segundos, así los cambios del admin se ven en todas.
+const DB_REFRESH_MS = Number(process.env.DB_REFRESH_MS) || 5000;
+let refreshing = null;
+async function refreshDbIfStale() {
+  if (!USE_PG || Date.now() - dbLoadedAt < DB_REFRESH_MS) return;
+  if (!refreshing) {
+    refreshing = fetchPgDb()
+      .then(stored => {
+        if (stored) db = normalizeDb(stored);
+        dbLoadedAt = Date.now();
+      })
+      .catch(err => console.warn('No se pudo refrescar la base:', err.message))
+      .finally(() => { refreshing = null; });
+  }
+  await refreshing;
+}
+
 async function ensureDb(req, res, next) {
   if (isStaticAssetPath(req.path)) return next();
   try {
     await dbReady;
+    await refreshDbIfStale();
     next();
   } catch (err) {
     console.error(err);
@@ -878,6 +924,9 @@ function orderExcelPayload(filename, buffer) {
 }
 
 function publicBaseUrl(req) {
+  // En producción: PUBLIC_BASE_URL=https://catalogo.lupo.ar para que los links de pedidos usen el dominio propio.
+  const fixed = String(process.env.PUBLIC_BASE_URL || '').trim().replace(/\/+$/, '');
+  if (fixed) return fixed;
   const host = req.get('x-forwarded-host') || req.get('host');
   const proto = req.get('x-forwarded-proto') || req.protocol || 'http';
   return `${proto}://${host}`;
@@ -996,8 +1045,8 @@ app.get('/api/health', async (req, res) => {
     await dbReady;
     return res.json({
       ok: true,
-      persistencia: USE_REMOTE_DB ? 'db.json-remoto' : 'db.json',
-      puedeGuardar: USE_REMOTE_DB || !IS_VERCEL
+      persistencia: USE_PG ? 'postgres' : (USE_REMOTE_DB ? 'db.json-remoto' : 'db.json'),
+      puedeGuardar: USE_PG || USE_REMOTE_DB || !IS_VERCEL
     });
   } catch (err) {
     return res.status(503).json({ ok: false, error: err.message || 'Base no disponible' });
@@ -1040,7 +1089,8 @@ app.get('/login', (req, res) => {
   if (user) return res.redirect(user.role === 'admin' ? '/admin' : '/');
   res.sendFile(path.join(ROOT, 'login.html'));
 });
-app.get('/', sendHtmlIfAuth('index.html'));
+// El catálogo es público: cualquiera lo ve, pero los precios solo con usuario.
+app.get('/', (req, res) => res.sendFile(path.join(ROOT, 'index.html')));
 app.get('/brasil', sendHtmlIfAuth('index.html', 'admin'));
 app.get('/brasil/pedido', sendHtmlIfAuth('pedido-brasil.html', 'admin'));
 app.get('/admin', sendHtmlIfAuth('admin.html', 'admin'));
@@ -1061,10 +1111,37 @@ app.post('/api/logout', (req, res) => {
   res.json({ ok: true });
 });
 
-app.get('/api/me', requireAuth, (req, res) => {
+const CONTACT_MESSAGE = 'Hola Ariel, quiero acceso al catálogo mayorista de Lupo para ver los precios.';
+
+function publicContact() {
+  const phone = normalizeWhatsapp(db.settings?.whatsappNumber);
+  return {
+    whatsappNumber: phone,
+    contactMessage: CONTACT_MESSAGE,
+    contactUrl: phone ? `https://wa.me/${phone}?text=${encodeURIComponent(CONTACT_MESSAGE)}` : ''
+  };
+}
+
+app.get('/api/public-config', (req, res) => {
+  res.json(publicContact());
+});
+
+app.get('/api/me', (req, res) => {
+  const user = getSessionUser(req);
+  if (!user) {
+    return res.json({
+      user: null,
+      pricesVisible: false,
+      priceListName: null,
+      discountPercent: 0,
+      ...publicContact()
+    });
+  }
+  req.user = user;
   const list = getListById(req.user.priceListId);
   res.json({
     user: publicUser(req.user),
+    pricesVisible: true,
     priceListName: list ? list.name : null,
     discountPercent: parseDiscountPercent(req.user.discountPercent),
     whatsappNumber: normalizeWhatsapp(db.settings?.whatsappNumber)
@@ -1271,11 +1348,15 @@ async function sendOrderExcel(req, res) {
 app.get('/pedido/:token', sendOrderExcel);
 app.get('/api/pedido/:token', sendOrderExcel);
 
-app.get('/api/catalog', requireAuth, (req, res) => {
+app.get('/api/catalog', (req, res) => {
+  const user = getSessionUser(req);
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.setHeader('Vary', 'Cookie, Accept-Encoding');
   const published = new Set(db.publishedIds);
-  const list = getListById(req.user.priceListId);
+  // Sin usuario no se manda ningún precio: ni lista ni descuento.
+  const list = user ? getListById(user.priceListId) : null;
   const prices = list && list.prices ? list.prices : {};
-  const discountPercent = parseDiscountPercent(req.user.discountPercent);
+  const discountPercent = user ? parseDiscountPercent(user.discountPercent) : 0;
   const items = PRODUCTS
     .filter(p => isArgentinaProduct(p) && published.has(p.id))
     .map(p => {
@@ -1291,7 +1372,8 @@ app.get('/api/catalog', requireAuth, (req, res) => {
     catalogs: catalogSummaries(items),
     labels: db.customLabels || [],
     priceListName: list ? list.name : null,
-    discountPercent
+    discountPercent,
+    pricesVisible: Boolean(user)
   });
 });
 
@@ -1779,7 +1861,9 @@ if (require.main === module) {
     .then(() => {
       app.listen(PORT, () => {
         console.log(`Catálogo Lupo B2B en http://localhost:${PORT}`);
-        console.log(USE_REMOTE_DB ? 'Persistencia: db.json remoto (GitHub rama data)' : 'Persistencia: db.json local');
+        console.log(USE_PG
+          ? 'Persistencia: Postgres (DATABASE_URL)'
+          : (USE_REMOTE_DB ? 'Persistencia: db.json remoto (GitHub rama data)' : 'Persistencia: db.json local'));
         console.log('Admin: admin / admin123');
         console.log('Cliente: cliente / cliente123');
       });
