@@ -6,3 +6,5 @@ tmp_pdf_text/
 .env.local
 .env*.local
 
+db.json
+db.json.tmp

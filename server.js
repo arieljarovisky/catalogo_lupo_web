@@ -149,26 +149,31 @@ function seedDb() {
       { id: mayoristaId, name: 'Agosto 2026 Capital', prices: {} },
       { id: minoristaId, name: 'Minorista', prices: {} }
     ],
-    users: [
-      {
-        id: 'user-admin',
-        username: 'admin',
-        name: 'Administrador',
-        passwordHash: hashPassword('admin123'),
-        role: 'admin',
-        priceListId: mayoristaId
-      },
-      {
-        id: 'user-cliente',
-        username: 'cliente',
-        name: 'Cliente demo',
-        passwordHash: hashPassword('cliente123'),
-        role: 'cliente',
-        priceListId: mayoristaId
-      }
-    ],
+    users: [],
     settings: { whatsappNumber: '' },
     customLabels: defaultCustomLabels()
+  };
+}
+
+// Solo se usa cuando la base no tiene ningún usuario (instalación nueva).
+// La clave sale de ADMIN_PASSWORD o se genera al azar y se muestra una sola vez en consola.
+function seedAdminUser(priceListId) {
+  const fromEnv = String(process.env.ADMIN_PASSWORD || '');
+  const password = fromEnv.length >= 8 ? fromEnv : crypto.randomBytes(12).toString('base64url');
+  if (!fromEnv) {
+    console.warn(`Base nueva: se creó el usuario "admin" con clave temporal: ${password}`);
+    console.warn('Cambiala desde el panel de administración apenas entres.');
+  } else if (fromEnv.length < 8) {
+    console.warn('ADMIN_PASSWORD tiene menos de 8 caracteres: se ignoró y se generó una clave al azar.');
+    console.warn(`Clave temporal de "admin": ${password}`);
+  }
+  return {
+    id: uid(),
+    username: 'admin',
+    name: 'Administrador',
+    passwordHash: hashPassword(password),
+    role: 'admin',
+    priceListId
   };
 }
 
@@ -262,9 +267,8 @@ function normalizeDb(parsed) {
     if (fs.existsSync(agostoPath)) mayorista.name = 'Agosto 2026 Capital';
   }
   if (!data.users.length) {
-    const seeded = seedDb();
-    data.users = seeded.users;
-    if (!data.priceLists.length) data.priceLists = seeded.priceLists;
+    if (!data.priceLists.length) data.priceLists = seedDb().priceLists;
+    data.users = [seedAdminUser(data.priceLists[0]?.id || null)];
   }
   for (const user of data.users) {
     user.discountPercent = parseDiscountPercent(user.discountPercent);
@@ -287,15 +291,12 @@ function saveDbToFile(data) {
 async function loadDb() {
   // Una sola base: si hay GITHUB_TOKEN, local y prod usan el mismo db.json remoto.
   if (USE_REMOTE_DB) {
-    let remote = null;
-    try {
-      remote = await fetchRemoteDb();
-    } catch (err) {
-      // No tumbar la app: si GitHub falla al arrancar, servir el db.json del deploy.
-      console.warn('No se pudo leer db remoto, uso db.json local:', err.message);
-    }
+    // Si GitHub falla, NO caer a una base local ni pisar la remota:
+    // se responde 503 y se reintenta en el próximo request.
+    const remote = await fetchRemoteDb();
     const data = normalizeDb(remote || loadDbFromFile());
     if (!remote) {
+      // El archivo remoto no existe todavía (404): se crea por primera vez.
       try {
         await saveRemoteDb(data);
       } catch (err) {
@@ -333,15 +334,24 @@ async function saveDb(data) {
 }
 
 let db = seedDb();
-const dbReady = loadDb()
-  .then(data => {
-    db = data;
-    return db;
-  })
-  .catch(err => {
-    console.error('No se pudo cargar la base:', err.message);
-    throw err;
-  });
+let dbPromise = null;
+
+function dbReady() {
+  if (!dbPromise) {
+    dbPromise = loadDb()
+      .then(data => {
+        db = data;
+        return db;
+      })
+      .catch(err => {
+        console.error('No se pudo cargar la base:', err.message);
+        dbPromise = null; // permitir reintento en el próximo request
+        throw err;
+      });
+  }
+  return dbPromise;
+}
+dbReady().catch(() => {});
 
 function isStaticAssetPath(urlPath) {
   return /^\/(assets|js|pdfs|orders)\//.test(urlPath)
@@ -367,7 +377,7 @@ function sendGzipJson(req, res, payload) {
 async function ensureDb(req, res, next) {
   if (isStaticAssetPath(req.path)) return next();
   try {
-    await dbReady;
+    await dbReady();
     next();
   } catch (err) {
     console.error(err);
@@ -916,8 +926,15 @@ function sendHtmlIfAuth(file, role) {
 }
 
 function sessionSecret() {
-  if (process.env.SESSION_SECRET) return process.env.SESSION_SECRET;
-  if (IS_VERCEL) return 'lupo-vercel-change-SESSION_SECRET';
+  const fromEnv = String(process.env.SESSION_SECRET || '');
+  if (fromEnv.length >= 32) return fromEnv;
+  if (IS_VERCEL) {
+    // Sin un secreto propio cualquiera podría firmar una cookie de admin: se bloquea el login.
+    const err = new Error('Falta SESSION_SECRET (mínimo 32 caracteres) en Vercel. Configuralo y redeployá.');
+    err.status = 503;
+    throw err;
+  }
+  if (fromEnv) console.warn('SESSION_SECRET tiene menos de 32 caracteres: uso el secreto de la base local.');
   return db.sessionSecret || 'lupo-dev-secret';
 }
 
@@ -942,7 +959,13 @@ function encodeSession(data) {
 function decodeSession(token) {
   const [payload, sig] = String(token || '').split('.');
   if (!payload || !sig) return {};
-  const expected = crypto.createHmac('sha256', sessionSecret()).update(payload).digest('base64url');
+  let secret;
+  try {
+    secret = sessionSecret();
+  } catch {
+    return {};
+  }
+  const expected = crypto.createHmac('sha256', secret).update(payload).digest('base64url');
   const left = crypto.createHash('sha256').update(sig).digest();
   const right = crypto.createHash('sha256').update(expected).digest();
   if (!crypto.timingSafeEqual(left, right)) return {};
@@ -993,7 +1016,7 @@ app.use(express.json({ limit: '8mb' }));
 
 app.get('/api/health', async (req, res) => {
   try {
-    await dbReady;
+    await dbReady();
     return res.json({
       ok: true,
       persistencia: USE_REMOTE_DB ? 'db.json-remoto' : 'db.json',
@@ -1698,6 +1721,9 @@ app.post('/api/admin/users', requireAdmin, async (req, res) => {
   if (db.users.some(u => u.username.toLowerCase() === username)) {
     return res.status(400).json({ error: 'Ese usuario ya existe' });
   }
+  if (password.length < 8) {
+    return res.status(400).json({ error: 'La contraseña tiene que tener al menos 8 caracteres' });
+  }
   if (!getListById(priceListId)) {
     return res.status(400).json({ error: 'Lista de precios inválida' });
   }
@@ -1740,7 +1766,7 @@ app.patch('/api/admin/users/:id', requireAdmin, async (req, res) => {
   }
   if (req.body?.password) {
     const password = String(req.body.password);
-    if (password.length < 4) return res.status(400).json({ error: 'La contraseña es demasiado corta' });
+    if (password.length < 8) return res.status(400).json({ error: 'La contraseña tiene que tener al menos 8 caracteres' });
     user.passwordHash = hashPassword(password);
   }
   await saveDb(db);
@@ -1775,13 +1801,11 @@ app.use((err, req, res, next) => {
 });
 
 if (require.main === module) {
-  dbReady
+  dbReady()
     .then(() => {
       app.listen(PORT, () => {
         console.log(`Catálogo Lupo B2B en http://localhost:${PORT}`);
         console.log(USE_REMOTE_DB ? 'Persistencia: db.json remoto (GitHub rama data)' : 'Persistencia: db.json local');
-        console.log('Admin: admin / admin123');
-        console.log('Cliente: cliente / cliente123');
       });
     })
     .catch(err => {
