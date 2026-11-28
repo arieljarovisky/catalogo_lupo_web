@@ -6,22 +6,27 @@
   <title>Ingresar | Lupo</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=15">
+  <link href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css?v=31">
 </head>
 <body class="login-page">
   <header class="topbar">
-    <span>Envío a todo el país</span>
-    <span>Solo venta mayorista</span>
-    <span>Atención comercial</span>
+    <div class="topbar-track">
+      <span>Catálogo mayorista Lupo 2026</span>
+      <span>Solo venta mayorista</span>
+      <span>Atención comercial personalizada</span>
+      <span aria-hidden="true">Catálogo mayorista Lupo 2026</span>
+      <span aria-hidden="true">Solo venta mayorista</span>
+      <span aria-hidden="true">Atención comercial personalizada</span>
+    </div>
   </header>
   <main class="login-wrap">
     <a class="brand-link" href="/">
       <img src="/logo.svg?v=2" alt="Lupo" class="logo-img">
     </a>
     <section class="login-card">
-      <h1>Accedé a tu catálogo</h1>
-      <p>Ingresá con tu usuario para ver tu lista de precios y hacer pedidos.</p>
+      <h1>Ingresá a tu cuenta</h1>
+      <p>Con tu usuario de cliente ves tu lista de precios y podés armar pedidos.</p>
       <form id="loginForm" autocomplete="on">
         <label>
           Usuario
@@ -34,8 +39,9 @@
         <p id="loginError" class="form-error" hidden></p>
         <button id="loginSubmit" class="btn btn-black" type="submit">Ingresar</button>
       </form>
-      <p class="login-alt">¿No tenés usuario? Pedíselo a Ariel por WhatsApp. Mientras tanto podés <a href="/">ver el catálogo sin precios</a>.</p>
+      <p class="login-help">¿Todavía no tenés usuario? <a href="/" id="loginWhatsapp">Pedilo por WhatsApp</a></p>
     </section>
+    <a class="login-back" href="/">Volver al catálogo</a>
   </main>
   <script src="/js/auth.js"></script>
 </body>

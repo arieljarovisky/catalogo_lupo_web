@@ -6,24 +6,30 @@
   <title>Catálogo Lupo</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css?v=20">
+  <link href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css?v=31">
 </head>
 <body>
-  <div class="topbar">
-    <span>Envío a todo el país</span>
-    <span id="topbarMode">Catálogo mayorista</span>
-    <span>Atención comercial</span>
+  <div class="topbar" aria-label="Información">
+    <div class="topbar-track">
+      <span>Catálogo mayorista Lupo 2026</span>
+      <span id="topbarMode">Envíos a todo el país</span>
+      <span>Atención comercial personalizada</span>
+      <span aria-hidden="true">Catálogo mayorista Lupo 2026</span>
+      <span aria-hidden="true">Envíos a todo el país</span>
+      <span aria-hidden="true">Atención comercial personalizada</span>
+    </div>
   </div>
   <header class="site-header">
     <div class="header-row">
-      <a href="/" id="logoHome"><img src="/logo.svg?v=2" alt="Lupo" class="logo-img"></a>
-      <form class="search-box" id="headerSearchForm">
-        <input id="search" placeholder="Buscar por código, nombre, color o talle">
+      <a href="/" id="logoHome" class="logo-link"><img src="/logo.svg?v=2" alt="Lupo" class="logo-img"></a>
+      <form class="search-box" id="headerSearchForm" role="search">
+        <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="search" type="search" placeholder="Buscar por código, nombre, color o talle" aria-label="Buscar productos">
         <button type="submit">Buscar</button>
       </form>
       <div class="header-actions">
-        <div class="user-chip">
+        <div class="user-chip" data-auth-only>
           <b id="userName">—</b>
           <span id="userList">Lista de precios</span>
         </div>
@@ -34,9 +40,17 @@
         <a id="brasilLink" class="btn btn-ghost" href="/brasil" hidden>Pedidos Brasil</a>
         <a id="mayoristaLink" class="btn btn-ghost" href="/" hidden>Catálogo mayorista</a>
         <a id="adminLink" class="btn btn-ghost" href="/admin" hidden>Admin</a>
-        <button id="logoutBtn" class="btn btn-ghost" type="button">Salir</button>
-        <button id="cartBtn" class="btn btn-black cart-btn" type="button">
-          Pedido
+        <a id="loginLink" class="icon-link" href="/login" hidden data-public-only>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+          <span>Ingresar</span>
+        </a>
+        <button id="logoutBtn" class="icon-link" type="button" data-auth-only>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4h4v16h-4"/><path d="M10 8l-4 4 4 4"/><path d="M6 12h10"/></svg>
+          <span>Salir</span>
+        </button>
+        <button id="cartBtn" class="icon-link cart-btn" type="button" data-auth-only aria-label="Ver pedido">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7h12l-1 13H7L6 7Z"/><path d="M9 7a3 3 0 0 1 6 0"/></svg>
+          <span>Pedido</span>
           <span id="cartCount" class="cart-count">0</span>
         </button>
       </div>
@@ -45,6 +59,18 @@
       <button type="button" data-catalog="" class="active">Todos</button>
     </nav>
   </header>
+
+  <section class="access-hero" id="accessHero" hidden data-public-only>
+    <div class="access-hero-inner">
+      <p class="eyebrow">Venta mayorista</p>
+      <h1>Colección Lupo 2026</h1>
+      <p class="access-hero-copy">Ropa interior, lencería, medias, deportivo y pijamas. Explorá todo el catálogo; para ver precios y hacer pedidos pedinos tu usuario de cliente.</p>
+      <div class="access-hero-actions">
+        <a class="btn btn-black accessWhatsapp" href="#" target="_blank" rel="noopener">Pedir acceso por WhatsApp</a>
+        <a class="btn btn-outline" href="/login">Ya tengo usuario</a>
+      </div>
+    </div>
+  </section>
 
   <main class="wrap">
     <div class="catalog-layout">
@@ -104,10 +130,29 @@
         </section>
         <section id="grid" class="grid"></section>
         <button id="gridSentinel" class="btn btn-ghost grid-sentinel" type="button" hidden>Ver más productos</button>
-        <p class="footer-note">Catálogo armado con tus PDF de Boxers y slips, Lencería y Medias 2026.</p>
       </section>
     </div>
   </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <img src="/logo.svg?v=2" alt="Lupo" class="logo-img">
+        <p>Catálogo mayorista de productos Lupo originales: ropa interior, lencería, medias, deportivo y pijamas.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Catálogo</h4>
+        <a href="/">Todos los productos</a>
+        <a href="/login" data-public-only hidden>Ingresar</a>
+      </div>
+      <div class="footer-col">
+        <h4>¿Necesitás ayuda?</h4>
+        <a class="accessWhatsapp" href="#" target="_blank" rel="noopener">Escribinos por WhatsApp</a>
+        <span>Atención comercial de lunes a viernes</span>
+      </div>
+    </div>
+    <div class="footer-legal">© <span id="footerYear">2026</span> Lupo · Catálogo mayorista · lupo.ar</div>
+  </footer>
 
   <div id="modal" class="modal">
     <button id="closeModal" class="close" aria-label="Cerrar">×</button>
@@ -127,7 +172,15 @@
         <h3 id="modalTitle"></h3>
         <div id="modalPrice" class="modal-price"></div>
         <p id="modalDesc" class="desc" style="display:block;-webkit-line-clamp:unset"></p>
-        <form id="addToCartForm" class="cart-form" autocomplete="off">
+        <div id="modalAccess" class="access-box" hidden data-public-only>
+          <p class="access-box-title">Precios solo para clientes</p>
+          <p>Pedinos tu usuario mayorista para ver la lista de precios y armar pedidos desde el catálogo.</p>
+          <div class="access-box-actions">
+            <a class="btn btn-black accessWhatsapp" href="#" target="_blank" rel="noopener">Pedir acceso por WhatsApp</a>
+            <a class="btn btn-outline" href="/login">Ingresar</a>
+          </div>
+        </div>
+        <form id="addToCartForm" class="cart-form" autocomplete="off" data-auth-only>
           <input type="hidden" id="cartProductId" value="">
           <input type="hidden" id="cartSize" value="">
           <input type="hidden" id="cartColor" value="">
@@ -190,7 +243,7 @@
     </aside>
   </div>
 
-  <div class="order-dock" id="orderDock" hidden>
+  <div class="order-dock" id="orderDock" hidden data-auth-only>
     <div>
       <b id="dockSummary">Pedido vacío</b>
       <span>Tocá para revisar y enviar</span>
@@ -201,6 +254,6 @@
   </div>
 
   <script src="/js/common.js?v=7"></script>
-  <script src="/app.js?v=24"></script>
+  <script src="/app.js?v=30"></script>
 </body>
 </html>

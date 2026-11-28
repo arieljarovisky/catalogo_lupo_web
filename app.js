@@ -26,9 +26,7 @@ let cartMsgTimer = null;
 let whatsappNumber = '';
 let modalProduct = null;
 // Visitante sin usuario: ve el catálogo pero no precios ni pedidos.
-let guestMode = false;
 let contactUrl = '';
-const GUEST_PRICE_TEXT = 'Precio con usuario';
 
 function cartStorageKey() {
   const mode = brasilMode ? 'brasil' : 'mayorista';
@@ -98,6 +96,27 @@ function colorMainPhoto(c) {
   if (/\/colors\/lupo-pijamas-/i.test(img)) return '';
   return colorPhoto(c);
 }
+function isPublicMode() {
+  return !currentUser;
+}
+function accessWhatsappUrl() {
+  if (/^https:\/\//i.test(contactUrl)) return contactUrl;
+  const text = encodeURIComponent('Hola! Quiero un usuario para ver los precios del catálogo mayorista Lupo.');
+  const num = String(whatsappNumber || '').replace(/\D/g, '');
+  return num ? `https://wa.me/${num}?text=${text}` : '/login';
+}
+function applyAccessMode() {
+  const isPublic = isPublicMode();
+  document.body.classList.toggle('is-public', isPublic);
+  document.querySelectorAll('[data-public-only]').forEach(el => { el.hidden = !isPublic; });
+  document.querySelectorAll('[data-auth-only]').forEach(el => { if (isPublic) el.hidden = true; });
+  document.querySelectorAll('.accessWhatsapp').forEach(a => { a.href = accessWhatsappUrl(); });
+  if ($('footerYear')) $('footerYear').textContent = String(new Date().getFullYear());
+  if (isPublic && $('catalogBlurb')) {
+    $('catalogBlurb').textContent = 'Colección 2026. Los precios están disponibles solo para clientes mayoristas.';
+  }
+}
+const LOCK_ICON = '<svg class="lock-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
 function isAdmin() {
   return currentUser?.role === 'admin';
 }
@@ -413,6 +432,7 @@ async function importOrderFromFile(file) {
   openCart();
 }
 function loadCart() {
+  if (isPublicMode()) return [];
   try {
     const parsed = JSON.parse(localStorage.getItem(cartStorageKey()) || '[]');
     if (!Array.isArray(parsed)) return [];
@@ -466,7 +486,7 @@ function hasDiscountPrice(p) {
     && p.priceArsOriginal > p.priceArs;
 }
 function priceHtml(p) {
-  if (guestMode) return escapeHtml(GUEST_PRICE_TEXT);
+  if (isPublicMode()) return `${LOCK_ICON}<span>Precio solo clientes</span>`;
   if (brasilMode) return escapeHtml(formatCatalogPrice(p));
   if (!Number.isFinite(p.priceArs)) return escapeHtml('Consultar');
   if (hasDiscountPrice(p)) {
@@ -522,48 +542,17 @@ function showCartMsg(text, ok = true) {
   cartMsgTimer = setTimeout(() => { msg.hidden = true; }, 1800);
 }
 
-function setupGuestMode(me) {
-  guestMode = true;
-  contactUrl = me.contactUrl || '';
-  document.body.classList.add('guest-mode');
-  $('userName').textContent = 'Visitante';
-  $('userList').textContent = 'Ingresá para ver precios';
-  const loginBtn = $('logoutBtn');
-  loginBtn.textContent = 'Ingresar';
-  loginBtn.addEventListener('click', e => {
-    e.stopImmediatePropagation();
-    window.location.href = '/login';
-  }, true);
-  ['cartBtn', 'orderDock', 'addToCartForm'].forEach(id => {
-    const el = $(id);
-    if (el) { el.hidden = true; el.style.display = 'none'; }
-  });
-  const form = $('addToCartForm');
-  if (form && !$('guestAccessCta')) {
-    const cta = document.createElement('div');
-    cta.id = 'guestAccessCta';
-    cta.className = 'guest-cta';
-    cta.innerHTML = `
-      <p><b>¿Querés ver los precios?</b><br>Los precios mayoristas son solo para clientes con usuario. Escribile a Ariel y te asigna uno.</p>
-      ${contactUrl ? `<a class="btn btn-black" href="${escapeHtml(contactUrl)}" target="_blank" rel="noopener">Pedir acceso por WhatsApp</a>` : ''}
-      <a class="btn btn-ghost" href="/login">Ya tengo usuario</a>`;
-    form.after(cta);
-  }
-}
-
 async function init() {
   const me = await api('/api/me');
-  currentUser = me.user;
-  whatsappNumber = me.whatsappNumber || '';
-  if (!currentUser) {
-    if (brasilMode) {
-      window.location.href = '/login';
-      return;
-    }
-    setupGuestMode(me);
-  } else {
-    $('userName').textContent = currentUser.name || currentUser.username;
+  currentUser = me?.user || null;
+  whatsappNumber = me?.whatsappNumber || '';
+  contactUrl = me?.contactUrl || '';
+  if (!currentUser && brasilMode) {
+    window.location.href = '/login';
+    return;
   }
+  applyAccessMode();
+  if (currentUser) $('userName').textContent = currentUser.name || currentUser.username;
 
   const admin = isAdmin();
   if ($('adminLink')) $('adminLink').hidden = !admin;
@@ -590,7 +579,7 @@ async function init() {
     if ($('cartTitle')) $('cartTitle').textContent = 'Pedido Brasil';
     if ($('viewPedidoPageBtn')) $('viewPedidoPageBtn').hidden = false;
     if ($('dockPedidoPageBtn')) $('dockPedidoPageBtn').hidden = false;
-  } else if (!guestMode) {
+  } else if (currentUser) {
     const discount = Number(me.discountPercent) || Number(me.user?.discountPercent) || 0;
     const listLabel = me.priceListName ? `Lista ${me.priceListName}` : 'Sin lista asignada';
     $('userList').textContent = discount > 0 ? `${listLabel} · ${discount}% off` : listLabel;
@@ -603,7 +592,7 @@ async function init() {
   products = catalog.products || [];
   indexProducts();
   setCustomLabels(catalog.labels || []);
-  cart = guestMode ? [] : loadCart();
+  cart = loadCart();
   cartNotes = loadNotes();
   if ($('cartNotes')) $('cartNotes').value = cartNotes;
   applyTextScale(localStorage.getItem(textScaleKey()) || 'md');
@@ -876,7 +865,7 @@ function renderOfferCards() {
   const cards = getCustomLabels().filter(l => counts[l.id] > 0);
   wrap.hidden = !cards.length;
   wrap.innerHTML = cards.map(b => `
-    <button type="button" class="offer-card ${state.badge === b.id ? 'active' : ''}" data-offer="${escapeHtml(b.id)}" style="border-left:4px solid ${escapeHtml(b.color)}">
+    <button type="button" class="offer-card ${state.badge === b.id ? 'active' : ''}" data-offer="${escapeHtml(b.id)}" style="--tag-color:${escapeHtml(b.color)}">
       <b>${escapeHtml(b.label)}</b>
       <span>${counts[b.id]} ${counts[b.id] === 1 ? 'artículo' : 'artículos'}</span>
     </button>
@@ -912,15 +901,15 @@ function card(p) {
       ? `<div class="product-stock-pill">${totalStock} u. en stock</div>`
       : `<div class="product-stock-pill out">Sin stock</div>`;
   return `<article class="product">
-    <div class="thumb"><img loading="lazy" decoding="async" src="${productImage(p)}" alt="${escapeHtml(title)}"><span class="badge">${escapeHtml(p.code)}</span>${offerTagHtml(p)}</div>
+    <div class="thumb" data-open="${p.id}"><img loading="lazy" decoding="async" src="${productImage(p)}" alt="${escapeHtml(title)}"><span class="badge">${escapeHtml(p.code)}</span>${offerTagHtml(p)}</div>
     <div class="info">
       <h4>${escapeHtml(title)}</h4>
-      <div class="price ${priced ? '' : 'muted'}">${priceHtml(p)}</div>
+      <div class="price ${isPublicMode() ? 'locked' : priced ? '' : 'muted'}">${priceHtml(p)}</div>
       ${stockHtml}
       <div class="meta"><span class="pill">${escapeHtml(catalogLabel(p.catalog))}</span><span class="pill">${escapeHtml(idx?.categoryLabel || translateText(p.category))}</span></div>
       <p class="desc">${escapeHtml(idx?.desc || translateText(p.description || 'Sin descripción cargada.'))}</p>
       <div class="card-actions">
-        <button class="btn btn-black" data-open="${p.id}">Pedir</button>
+        <button class="btn btn-black" data-open="${p.id}">${isPublicMode() ? 'Ver detalle' : 'Pedir'}</button>
       </div>
     </div>
   </article>`;
@@ -1113,13 +1102,14 @@ function openModal(id) {
   $('modalTitle').textContent = productDisplayName(p);
   $('modalCode').textContent = p.code;
   $('modalPrice').innerHTML = priceHtml(p);
-  $('modalPrice').classList.toggle('muted', !hasCatalogPrice(p));
+  $('modalPrice').classList.toggle('muted', !isPublicMode() && !hasCatalogPrice(p));
+  $('modalPrice').classList.toggle('locked', isPublicMode());
   $('modalDesc').textContent = translateText(p.description || '');
   fillCartForm(p);
   const colorNames = productColorNames(p);
   const priceRowLabel = brasilMode ? 'FOB USD' : 'Precio';
   $('modalMeta').innerHTML = `
-    <tr><td>${priceRowLabel}</td><td>${priceHtml(p)}</td></tr>
+    ${isPublicMode() ? '' : `<tr><td>${priceRowLabel}</td><td>${priceHtml(p)}</td></tr>`}
     <tr><td>Catálogo</td><td>${escapeHtml(catalogLabel(p.catalog))}</td></tr>
     <tr><td>Categoría</td><td>${escapeHtml(translateText(p.category))}</td></tr>
     <tr><td>Talles</td><td>${escapeHtml(p.sizes || 'No detectado')}</td></tr>
