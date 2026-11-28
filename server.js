@@ -1446,11 +1446,45 @@ app.get('/api/admin/lupohub-stock', requireAdmin, async (req, res) => {
   const sellable = PRODUCTS.filter(isArgentinaProduct);
   const unmatched = [];
   let matched = 0;
+  const detail = req.query.detail === '1';
+  const items = detail ? (await getLupohubItems()) || [] : [];
+  const digits = v => String(v || '').replace(/\D/g, '').replace(/^0+/, '');
+  const usedSkus = new Set();
   for (const p of sellable) {
-    if (lupohubStockMapFor(index, p.code, resolvedColors(p))) matched += 1;
-    else unmatched.push({ id: p.id, code: p.code, name: resolvedName(p) });
+    if (lupohubStockMapFor(index, p.code, resolvedColors(p))) {
+      matched += 1;
+      if (detail) {
+        const base = digits(String(p.code).split(/[-\s/]/)[0]);
+        items.forEach(it => { if (digits(it.sku) === base || digits(it.sku) === digits(p.code)) usedSkus.add(it.sku); });
+      }
+      continue;
+    }
+    const row = { id: p.id, code: p.code, name: resolvedName(p) };
+    if (detail) {
+      const base = digits(String(p.code).split(/[-\s/]/)[0]);
+      const near = items.filter(it => {
+        const d = digits(it.sku);
+        return d && base && (d === base || d.startsWith(base) || base.startsWith(d) || d.includes(base));
+      });
+      row.catalogColors = resolvedColors(p).map(c => `${c.code}:${c.name}`);
+      row.catalogSizes = sizesFromValue(p.sizes);
+      row.lupohub = [...new Set(near.map(it => `${it.sku}|${it.colorCode}:${it.colorName}|${it.size}`))].slice(0, 25);
+    }
+    unmatched.push(row);
   }
-  res.json({ ...status, matched, total: sellable.length, unmatched });
+  const out = { ...status, matched, total: sellable.length, unmatched };
+  if (detail) {
+    const skus = new Map();
+    for (const it of items) {
+      if (usedSkus.has(it.sku)) continue;
+      const e = skus.get(it.sku) || { sku: it.sku, colors: new Set(), stock: 0 };
+      e.colors.add(`${it.colorCode}:${it.colorName}`);
+      e.stock += Number(it.stock) || 0;
+      skus.set(it.sku, e);
+    }
+    out.lupohubUnused = [...skus.values()].map(e => ({ sku: e.sku, stock: e.stock, colors: [...e.colors].slice(0, 8) }));
+  }
+  res.json(out);
 });
 
 app.get('/api/admin/catalog-brasil', requireAdmin, async (req, res) => {
