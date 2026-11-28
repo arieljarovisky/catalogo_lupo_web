@@ -118,6 +118,15 @@
             <p id="catalogBlurb">Artículos de tus catálogos 2026. Los precios corresponden a tu lista asignada.</p>
           </div>
           <div class="view-tools">
+            <select id="sortSelect" class="sort-select" aria-label="Ordenar productos">
+              <option value="">Ordenar: recomendado</option>
+              <option value="stock-desc" data-needs="stock">Más stock primero</option>
+              <option value="stock-asc" data-needs="stock">Menos stock primero</option>
+              <option value="price-asc" data-needs="price">Precio: menor a mayor</option>
+              <option value="price-desc" data-needs="price">Precio: mayor a menor</option>
+              <option value="code">Código</option>
+              <option value="name">Nombre A-Z</option>
+            </select>
             <button id="gridBtn" class="btn btn-black" type="button">Grilla</button>
             <button id="listBtn" class="btn btn-ghost" type="button">Lista</button>
           </div>

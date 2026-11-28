@@ -1,6 +1,6 @@
 const { escapeHtml, translateText, normalizeText, formatArs, formatFob, api, logout, catalogLabel, setCustomLabels, getCustomLabels, badgeInfo, badgeLabel, badgeStyle, isPromoLabel, sizesFrom, stockQty } = window.LupoCommon;
 
-const state = { search: '', codes: '', catalog: '', category: '', size: '', color: '', badge: '', view: 'grid', promos: false };
+const state = { search: '', codes: '', catalog: '', category: '', size: '', color: '', badge: '', view: 'grid', promos: false, sort: '' };
 const $ = id => document.getElementById(id);
 const SURTIDO_SIZE = 'Surtido';
 const SURTIDO_COLOR = 'SURTIDO';
@@ -170,7 +170,7 @@ function invalidateFilterCache() {
   filteredCacheKey = null;
 }
 function filterStateKey() {
-  return [state.search, state.codes, state.catalog, state.category, state.size, state.color, state.badge, state.promos ? '1' : '0'].join('\0');
+  return [state.search, state.codes, state.catalog, state.category, state.size, state.color, state.badge, state.promos ? '1' : '0', state.sort].join('\0');
 }
 function applyProductUpdate(updated) {
   if (!updated?.id) return;
@@ -591,6 +591,7 @@ async function init() {
     : await api('/api/catalog');
   products = catalog.products || [];
   indexProducts();
+  syncSortOptions();
   setCustomLabels(catalog.labels || []);
   cart = loadCart();
   cartNotes = loadNotes();
@@ -647,6 +648,10 @@ async function init() {
   $('clearBtn').addEventListener('click', resetFilters);
   $('copyBtn').addEventListener('click', copyVisibleCodes);
   $('gridBtn').addEventListener('click', () => setView('grid'));
+  $('sortSelect')?.addEventListener('change', e => {
+    state.sort = e.target.value;
+    render();
+  });
   $('listBtn').addEventListener('click', () => setView('list'));
   $('closeModal').addEventListener('click', closeModal);
   $('modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
@@ -804,6 +809,47 @@ function isCodeQuery(q) {
   const compact = String(q || '').replace(/[^a-z0-9]/g, '');
   return compact.length >= 4 && /^\d+$/.test(compact);
 }
+function productSortPrice(p) {
+  const v = brasilMode ? p.fobUsd : p.priceArs;
+  return Number.isFinite(v) ? v : null;
+}
+/** Orden elegido en el selector. Los productos sin dato (sin stock o sin precio) van al final. */
+function compareBySort(a, b) {
+  const mode = state.sort;
+  if (!mode) return 0;
+  const byNullable = (x, y, dir) => {
+    if (x == null && y == null) return 0;
+    if (x == null) return 1;
+    if (y == null) return -1;
+    return dir * (x - y);
+  };
+  if (mode === 'stock-desc') return byNullable(productStockTotal(a), productStockTotal(b), -1);
+  if (mode === 'stock-asc') return byNullable(productStockTotal(a), productStockTotal(b), 1);
+  if (mode === 'price-asc') return byNullable(productSortPrice(a), productSortPrice(b), 1);
+  if (mode === 'price-desc') return byNullable(productSortPrice(a), productSortPrice(b), -1);
+  if (mode === 'code') return a.code.localeCompare(b.code, undefined, { numeric: true });
+  if (mode === 'name') {
+    const an = productIndex.get(a.id)?.displayName || a.name || '';
+    const bn = productIndex.get(b.id)?.displayName || b.name || '';
+    return an.localeCompare(bn, 'es', { sensitivity: 'base' });
+  }
+  return 0;
+}
+function syncSortOptions() {
+  const select = $('sortSelect');
+  if (!select) return;
+  const hasStock = products.some(p => productStockTotal(p) != null);
+  const hasPrice = products.some(p => productSortPrice(p) != null);
+  select.querySelectorAll('option[data-needs]').forEach(opt => {
+    const ok = opt.dataset.needs === 'stock' ? hasStock : hasPrice;
+    opt.hidden = !ok;
+    opt.disabled = !ok;
+  });
+  if (select.selectedOptions[0]?.disabled) {
+    select.value = '';
+    state.sort = '';
+  }
+}
 function computeFiltered() {
   const q = normalizeText(state.search);
   const wantedCodes = getCodes(state.codes);
@@ -826,6 +872,8 @@ function computeFiltered() {
     if (state.badge && p.badge !== state.badge) return false;
     return true;
   }).sort((a, b) => {
+    const chosen = compareBySort(a, b);
+    if (chosen) return chosen;
     const al = LINGERIE_CATALOGS.has(a.catalog) ? 0 : 1;
     const bl = LINGERIE_CATALOGS.has(b.catalog) ? 0 : 1;
     if (al !== bl) return al - bl;
