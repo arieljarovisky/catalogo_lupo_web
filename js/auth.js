@@ -29,3 +29,20 @@ form.addEventListener('submit', async (e) => {
     submitBtn.textContent = 'Ingresar';
   }
 });
+
+// Link "Pedilo por WhatsApp": usa el número público si el servidor lo expone.
+(async () => {
+  const link = document.getElementById('loginWhatsapp');
+  if (!link) return;
+  try {
+    const res = await fetch('/api/public-config', { credentials: 'include' });
+    if (!res.ok) return;
+    const cfg = await res.json();
+    const num = String(cfg.whatsappNumber || '').replace(/\D/g, '');
+    if (!num) return;
+    const text = encodeURIComponent(cfg.contactMessage || 'Hola! Quiero un usuario para ver los precios del catálogo mayorista Lupo.');
+    link.href = `https://wa.me/${num}?text=${text}`;
+    link.target = '_blank';
+    link.rel = 'noopener';
+  } catch {}
+})();
