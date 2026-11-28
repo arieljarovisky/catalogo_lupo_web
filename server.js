@@ -379,17 +379,29 @@ async function saveDb(data) {
 
 let db = seedDb();
 let dbLoadedAt = 0;
-const dbReady = loadDb()
-  .then(data => {
-    db = data;
-    dbLoadedAt = Date.now();
-    return db;
-  })
-  .catch(err => {
-    console.error('No se pudo cargar la base:', err.message);
-    throw err;
-  });
-// Evita que un fallo de la base tire abajo todo el proceso (en Vercel queda en 500 por request).
+let dbLoad = null;
+/**
+ * Carga la base una vez. Si falla (p. ej. un corte de red con Postgres), el próximo request
+ * vuelve a intentar en lugar de dejar la instancia rota para siempre.
+ */
+function dbReadyPromise() {
+  if (!dbLoad) {
+    dbLoad = loadDb()
+      .then(data => {
+        db = data;
+        dbLoadedAt = Date.now();
+        return db;
+      })
+      .catch(err => {
+        console.error('No se pudo cargar la base:', err.message);
+        dbLoad = null;
+        throw err;
+      });
+  }
+  return dbLoad;
+}
+const dbReady = dbReadyPromise();
+// Evita que un fallo de la base tire abajo todo el proceso.
 dbReady.catch(() => {});
 
 function isStaticAssetPath(urlPath) {
@@ -434,7 +446,7 @@ async function refreshDbIfStale() {
 async function ensureDb(req, res, next) {
   if (isStaticAssetPath(req.path)) return next();
   try {
-    await dbReady;
+    await dbReadyPromise();
     await refreshDbIfStale();
     next();
   } catch (err) {
@@ -1098,7 +1110,7 @@ app.use(express.json({ limit: '8mb' }));
 
 app.get('/api/health', async (req, res) => {
   try {
-    await dbReady;
+    await dbReadyPromise();
     return res.json({
       ok: true,
       persistencia: USE_PG ? 'postgres' : (USE_REMOTE_DB ? 'db.json-remoto' : 'db.json'),
