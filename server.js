@@ -13,6 +13,14 @@ const {
 } = require('./lib/db-remote');
 const { USE_PG, fetchPgDb, savePgDb } = require('./lib/db-postgres');
 const { buildXlsx } = require('./lib/xlsx');
+const {
+  USE_LUPOHUB,
+  getLupohubItems,
+  indexItems: indexLupohubItems,
+  stockMapFor: lupohubStockMapFor,
+  lupohubStatus,
+  normSize
+} = require('./lib/lupohub-stock');
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 const ROOT = __dirname;
@@ -135,8 +143,20 @@ function publicUser(user) {
     name: user.name || user.username,
     role: user.role,
     priceListId: user.priceListId || null,
-    discountPercent: parseDiscountPercent(user.discountPercent)
+    discountPercent: parseDiscountPercent(user.discountPercent),
+    showStock: canSeeStock(user)
   };
+}
+
+// Stock: solo con sesión. Los admin siempre lo ven; un cliente solo si el admin lo habilitó.
+function canSeeStock(user) {
+  if (!user) return false;
+  return user.role === 'admin' || user.showStock === true;
+}
+
+// Cada producto muestra stock salvo que el admin lo oculte (meta.showStock === false).
+function productShowsStock(p) {
+  return getMeta(p.id).showStock !== false;
 }
 
 function seedDb() {
@@ -499,6 +519,7 @@ function setMeta(id, patch) {
   if (!current.badge) delete current.badge;
   if (!current.badgeText) delete current.badgeText;
   if (!Number.isFinite(current.sortOrder)) delete current.sortOrder;
+  if (current.showStock !== false) delete current.showStock;
   const product = PRODUCT_BY_ID.get(id);
   if (!product || isLocalProduct(product) || !LOCAL_CATALOGS.has(current.argentinaCatalog)) {
     delete current.argentinaCatalog;
@@ -755,6 +776,7 @@ function productAdminView(p) {
     colors: resolvedColors(p),
     sizes: p.sizes || '',
     stock: meta.stock && typeof meta.stock === 'object' ? meta.stock : {},
+    showStock: meta.showStock !== false,
     badge: meta.badge || '',
     badgeText: meta.badgeText || '',
     sortOrder: Number.isFinite(meta.sortOrder) ? meta.sortOrder : null,
@@ -786,7 +808,36 @@ function catalogSummaries(list) {
   return sortCatalogSummaries([...map.values()]);
 }
 
-function catalogProduct(p, priceArs, { includeFob = false, priceArsOriginal = null, forArgentina = false } = {}) {
+/**
+ * Stock que se muestra para un producto: el de LupoHub si lo encuentra por código/color/talle,
+ * si no el cargado a mano en el admin. Las claves usan los talles tal como están en el catálogo.
+ */
+function effectiveStock(p, lupohubIndex) {
+  const manual = getMeta(p.id).stock;
+  if (lupohubIndex) {
+    const raw = lupohubStockMapFor(lupohubIndex, p.code, resolvedColors(p));
+    if (raw) {
+      const sizes = sizesFromValue(p.sizes);
+      const bySize = new Map(sizes.map(sz => [normSize(sz), sz]));
+      const out = {};
+      for (const [key, qty] of Object.entries(raw)) {
+        const [size, color] = key.split('|');
+        const catalogSize = bySize.get(size);
+        if (catalogSize) out[stockKey(catalogSize, color)] = qty;
+      }
+      if (Object.keys(out).length) return out;
+    }
+  }
+  return manual && typeof manual === 'object' ? manual : null;
+}
+
+async function loadLupohubIndex() {
+  if (!USE_LUPOHUB) return null;
+  const items = await getLupohubItems();
+  return items ? indexLupohubItems(items) : null;
+}
+
+function catalogProduct(p, priceArs, { includeFob = false, priceArsOriginal = null, forArgentina = false, includeStock = true, stock: stockOverride } = {}) {
   const meta = getMeta(p.id);
   const item = {
     id: p.id,
@@ -800,7 +851,10 @@ function catalogProduct(p, priceArs, { includeFob = false, priceArsOriginal = nu
     hasCustomImage: Boolean(meta.image),
     colors: resolvedColors(p).map(({ code, name, image, hasCustomImage }) => ({ code, name, image, hasCustomImage })),
     sizes: p.sizes || '',
-    stock: meta.stock && typeof meta.stock === 'object' ? meta.stock : {},
+    // null = no se informa stock (sin sesión, cliente sin permiso o producto oculto).
+    stock: !includeStock
+      ? null
+      : (stockOverride !== undefined ? stockOverride : (meta.stock && typeof meta.stock === 'object' ? meta.stock : null)),
     description: p.description || '',
     tech: p.tech || [],
     badge: meta.badge || '',
@@ -1348,7 +1402,7 @@ async function sendOrderExcel(req, res) {
 app.get('/pedido/:token', sendOrderExcel);
 app.get('/api/pedido/:token', sendOrderExcel);
 
-app.get('/api/catalog', (req, res) => {
+app.get('/api/catalog', async (req, res) => {
   const user = getSessionUser(req);
   res.setHeader('Cache-Control', 'private, no-store');
   res.setHeader('Vary', 'Cookie, Accept-Encoding');
@@ -1357,6 +1411,8 @@ app.get('/api/catalog', (req, res) => {
   const list = user ? getListById(user.priceListId) : null;
   const prices = list && list.prices ? list.prices : {};
   const discountPercent = user ? parseDiscountPercent(user.discountPercent) : 0;
+  const userSeesStock = canSeeStock(user);
+  const lupohubIndex = userSeesStock ? await loadLupohubIndex() : null;
   const items = PRODUCTS
     .filter(p => isArgentinaProduct(p) && published.has(p.id))
     .map(p => {
@@ -1364,7 +1420,9 @@ app.get('/api/catalog', (req, res) => {
       const priced = applyDiscount(listPrice, discountPercent);
       return catalogProduct(p, priced.priceArs, {
         priceArsOriginal: priced.priceArsOriginal,
-        forArgentina: true
+        forArgentina: true,
+        includeStock: userSeesStock && productShowsStock(p),
+        stock: userSeesStock && productShowsStock(p) ? effectiveStock(p, lupohubIndex) : null
       });
     });
   sendGzipJson(req, res, {
@@ -1373,8 +1431,24 @@ app.get('/api/catalog', (req, res) => {
     labels: db.customLabels || [],
     priceListName: list ? list.name : null,
     discountPercent,
-    pricesVisible: Boolean(user)
+    pricesVisible: Boolean(user),
+    stockVisible: userSeesStock
   });
+});
+
+// Estado del cruce con LupoHub: qué productos del catálogo encuentran stock y cuáles no.
+app.get('/api/admin/lupohub-stock', requireAdmin, async (req, res) => {
+  const index = await loadLupohubIndex();
+  const status = lupohubStatus();
+  if (!index) return res.json({ ...status, matched: 0, unmatched: [] });
+  const sellable = PRODUCTS.filter(isArgentinaProduct);
+  const unmatched = [];
+  let matched = 0;
+  for (const p of sellable) {
+    if (lupohubStockMapFor(index, p.code, resolvedColors(p))) matched += 1;
+    else unmatched.push({ id: p.id, code: p.code, name: resolvedName(p) });
+  }
+  res.json({ ...status, matched, total: sellable.length, unmatched });
 });
 
 app.get('/api/admin/catalog-brasil', requireAdmin, (req, res) => {
@@ -1539,6 +1613,9 @@ app.patch('/api/admin/products/:id', requireAdmin, async (req, res) => {
     const sortOrder = parseSortOrder(req.body.sortOrder);
     if (sortOrder === undefined) return res.status(400).json({ error: 'Orden inválido' });
     patch.sortOrder = sortOrder == null ? null : sortOrder;
+  }
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, 'showStock')) {
+    patch.showStock = req.body.showStock !== false;
   }
   if (Object.prototype.hasOwnProperty.call(req.body || {}, 'stock')) {
     const stock = parseStockMap(req.body.stock, p);
@@ -1790,7 +1867,8 @@ app.post('/api/admin/users', requireAdmin, async (req, res) => {
     passwordHash: hashPassword(password),
     role,
     priceListId,
-    discountPercent: parseDiscountPercent(req.body?.discountPercent)
+    discountPercent: parseDiscountPercent(req.body?.discountPercent),
+    showStock: req.body?.showStock === true
   };
   db.users.push(user);
   await saveDb(db);
@@ -1819,6 +1897,9 @@ app.patch('/api/admin/users/:id', requireAdmin, async (req, res) => {
   }
   if (req.body?.discountPercent != null) {
     user.discountPercent = parseDiscountPercent(req.body.discountPercent);
+  }
+  if (typeof req.body?.showStock === 'boolean') {
+    user.showStock = req.body.showStock;
   }
   if (req.body?.password) {
     const password = String(req.body.password);
