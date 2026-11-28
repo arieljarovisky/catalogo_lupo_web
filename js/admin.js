@@ -300,6 +300,8 @@ function fillEditor(p) {
   if ($('editorPublishedWrap')) $('editorPublishedWrap').hidden = !sellable;
   if ($('editorPublished')) $('editorPublished').checked = Boolean(p.published);
   if ($('editorStockField')) $('editorStockField').hidden = !sellable;
+  if ($('editorShowStockWrap')) $('editorShowStockWrap').hidden = !sellable;
+  if ($('editorShowStock')) $('editorShowStock').checked = p.showStock !== false;
   if ($('addColorForm')) $('addColorForm').hidden = !sellable;
   renderEditorColors(p);
   renderEditorStock(p);
@@ -492,6 +494,9 @@ function renderUsers() {
         </select>
       </td>
       <td><input type="number" min="0" max="100" step="0.01" data-discount value="${Number(u.discountPercent) || 0}" style="width:72px"></td>
+      <td>${u.role === 'admin'
+        ? '<span class="muted" title="Los administradores siempre ven el stock">Siempre</span>'
+        : `<input type="checkbox" data-show-stock ${u.showStock ? 'checked' : ''} aria-label="Puede ver stock">`}</td>
       <td><input type="password" data-pass placeholder="Opcional"></td>
       <td>
         <button class="btn btn-ghost" data-save-user type="button">Guardar</button>
@@ -521,6 +526,21 @@ async function refreshLabels() {
   renderLabels();
 }
 
+async function loadLupohubStatus() {
+  const box = $('lupohubStatus');
+  if (!box) return;
+  try {
+    const s = await api('/api/admin/lupohub-stock');
+    if (!s.enabled) return;
+    box.hidden = false;
+    $('lupohubSummary').textContent = s.error && !s.rows
+      ? `Stock de LupoHub: no se pudo conectar (${s.error})`
+      : `Stock de LupoHub: ${s.matched} de ${s.total} productos encontrados`;
+    $('lupohubUnmatched').innerHTML = (s.unmatched || [])
+      .map(p => `<li>${escapeHtml(p.code)} · ${escapeHtml(p.name)}</li>`).join('');
+  } catch {}
+}
+
 async function init() {
   const me = await api('/api/me');
   if (me.user.role !== 'admin') {
@@ -537,6 +557,7 @@ async function init() {
   await refreshLists();
   await loadList(currentListId);
   await refreshUsers();
+  loadLupohubStatus();
   renderProducts();
   renderCatalogs();
 
@@ -781,6 +802,7 @@ async function init() {
       if (sellable) {
         body.stock = readEditorStock();
         body.published = Boolean($('editorPublished')?.checked);
+        if ($('editorShowStock')) body.showStock = Boolean($('editorShowStock').checked);
       }
       const data = await api(`/api/admin/products/${editingId}`, {
         method: 'PATCH',
@@ -913,7 +935,8 @@ async function init() {
           password: $('userPassword').value,
           role: $('userRole').value,
           priceListId: $('userList').value,
-          discountPercent: $('userDiscount').value
+          discountPercent: $('userDiscount').value,
+          showStock: Boolean($('userShowStock')?.checked)
         }
       });
       $('userForm').reset();
@@ -934,6 +957,8 @@ async function init() {
           priceListId: row.querySelector('[data-user-list]').value,
           discountPercent: row.querySelector('[data-discount]').value
         };
+        const showStock = row.querySelector('[data-show-stock]');
+        if (showStock) body.showStock = showStock.checked;
         const pass = row.querySelector('[data-pass]').value;
         if (pass) body.password = pass;
         await api(`/api/admin/users/${id}`, { method: 'PATCH', body });
