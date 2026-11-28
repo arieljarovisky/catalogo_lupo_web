@@ -9,24 +9,38 @@ npm install
 npm start
 ```
 
-## Una sola base: `db.json`
+## Base de datos: Postgres
 
-Local y producción usan el **mismo** `db.json`.
+La app guarda usuarios, listas de precios, ajustes de productos y configuración en **Postgres**
+cuando existe la variable `DATABASE_URL` (o `POSTGRES_URL`, la que crea Vercel).
 
-- **Local (sin token):** lee/escribe el archivo `db.json` del disco.
-- **Producción (Vercel):** necesita `GITHUB_TOKEN` para leer/escribir ese mismo `db.json` en la rama `data` del repo (así los usuarios no se borran).
+Tablas (se crean solas al arrancar): `users`, `price_lists`, `prices`, `product_meta`, `app_kv`.
 
-### Variable obligatoria en Vercel
+### Configurarla en Vercel (gratis con Neon)
 
-1. Creá un Fine-grained token: [github.com/settings/tokens?type=beta](https://github.com/settings/tokens?type=beta)
-   - Repo: `catalogo_lupo_web`
-   - Contents: **Read and write**
-2. En Vercel → Settings → Environment Variables:
-   - `GITHUB_TOKEN` = el token
-   - `GITHUB_REPO` = `arieljarovisky/catalogo_lupo_web`
-   - `GITHUB_BRANCH` = `data`
+1. Vercel → proyecto → **Storage** → **Create Database** → **Neon (Postgres)** → plan Free → conectar al proyecto.
+   Eso agrega `DATABASE_URL`/`POSTGRES_URL` a las variables de entorno.
+2. Redeploy. En el primer arranque, si la base está vacía, se copia sola desde el `db.json`
+   de la rama `data` (si sigue estando `GITHUB_TOKEN`) o desde el `db.json` del repo.
+3. Verificá en `/api/health` que diga `"persistencia": "postgres"`.
 
-Sin eso, el sitio abre pero **el admin no puede guardar** en producción.
+Migración manual (opcional): `DATABASE_URL=... node scripts/migrate-to-postgres.js` (`--force` para pisar).
+
+Sin `DATABASE_URL` todo sigue funcionando como antes (db.json local o en la rama `data` con `GITHUB_TOKEN`).
+
+## Catálogo público, precios con usuario
+
+- `/` lo ve cualquiera, sin login. Los visitantes ven productos, fotos, talles y colores, pero **no precios**
+  (el servidor no los manda) y no pueden armar pedidos.
+- Para ver precios, el cliente pide acceso por WhatsApp (botón "Pedir acceso") y el admin le crea un usuario
+  en `/admin` con su lista de precios.
+- `/admin` y `/brasil` siguen siendo solo para administradores.
+
+## Dominio: catalogo.lupo.ar
+
+1. Vercel → proyecto → **Settings → Domains** → agregar `catalogo.lupo.ar`.
+2. En el DNS de lupo.ar, crear un registro `CNAME` `catalogo` → `cname.vercel-dns.com` (o el valor que muestre Vercel).
+3. Variable de entorno `PUBLIC_BASE_URL=https://catalogo.lupo.ar` para que los links de pedidos usen ese dominio.
 
 ## Accesos iniciales
 

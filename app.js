@@ -25,6 +25,10 @@ let cartNotes = '';
 let cartMsgTimer = null;
 let whatsappNumber = '';
 let modalProduct = null;
+// Visitante sin usuario: ve el catálogo pero no precios ni pedidos.
+let guestMode = false;
+let contactUrl = '';
+const GUEST_PRICE_TEXT = 'Precio con usuario';
 
 function cartStorageKey() {
   const mode = brasilMode ? 'brasil' : 'mayorista';
@@ -462,6 +466,7 @@ function hasDiscountPrice(p) {
     && p.priceArsOriginal > p.priceArs;
 }
 function priceHtml(p) {
+  if (guestMode) return escapeHtml(GUEST_PRICE_TEXT);
   if (brasilMode) return escapeHtml(formatCatalogPrice(p));
   if (!Number.isFinite(p.priceArs)) return escapeHtml('Consultar');
   if (hasDiscountPrice(p)) {
@@ -517,11 +522,48 @@ function showCartMsg(text, ok = true) {
   cartMsgTimer = setTimeout(() => { msg.hidden = true; }, 1800);
 }
 
+function setupGuestMode(me) {
+  guestMode = true;
+  contactUrl = me.contactUrl || '';
+  document.body.classList.add('guest-mode');
+  $('userName').textContent = 'Visitante';
+  $('userList').textContent = 'Ingresá para ver precios';
+  const loginBtn = $('logoutBtn');
+  loginBtn.textContent = 'Ingresar';
+  loginBtn.addEventListener('click', e => {
+    e.stopImmediatePropagation();
+    window.location.href = '/login';
+  }, true);
+  ['cartBtn', 'orderDock', 'addToCartForm'].forEach(id => {
+    const el = $(id);
+    if (el) { el.hidden = true; el.style.display = 'none'; }
+  });
+  const form = $('addToCartForm');
+  if (form && !$('guestAccessCta')) {
+    const cta = document.createElement('div');
+    cta.id = 'guestAccessCta';
+    cta.className = 'guest-cta';
+    cta.innerHTML = `
+      <p><b>¿Querés ver los precios?</b><br>Los precios mayoristas son solo para clientes con usuario. Escribile a Ariel y te asigna uno.</p>
+      ${contactUrl ? `<a class="btn btn-black" href="${escapeHtml(contactUrl)}" target="_blank" rel="noopener">Pedir acceso por WhatsApp</a>` : ''}
+      <a class="btn btn-ghost" href="/login">Ya tengo usuario</a>`;
+    form.after(cta);
+  }
+}
+
 async function init() {
   const me = await api('/api/me');
   currentUser = me.user;
   whatsappNumber = me.whatsappNumber || '';
-  $('userName').textContent = currentUser.name || currentUser.username;
+  if (!currentUser) {
+    if (brasilMode) {
+      window.location.href = '/login';
+      return;
+    }
+    setupGuestMode(me);
+  } else {
+    $('userName').textContent = currentUser.name || currentUser.username;
+  }
 
   const admin = isAdmin();
   if ($('adminLink')) $('adminLink').hidden = !admin;
@@ -548,7 +590,7 @@ async function init() {
     if ($('cartTitle')) $('cartTitle').textContent = 'Pedido Brasil';
     if ($('viewPedidoPageBtn')) $('viewPedidoPageBtn').hidden = false;
     if ($('dockPedidoPageBtn')) $('dockPedidoPageBtn').hidden = false;
-  } else {
+  } else if (!guestMode) {
     const discount = Number(me.discountPercent) || Number(me.user?.discountPercent) || 0;
     const listLabel = me.priceListName ? `Lista ${me.priceListName}` : 'Sin lista asignada';
     $('userList').textContent = discount > 0 ? `${listLabel} · ${discount}% off` : listLabel;
@@ -561,7 +603,7 @@ async function init() {
   products = catalog.products || [];
   indexProducts();
   setCustomLabels(catalog.labels || []);
-  cart = loadCart();
+  cart = guestMode ? [] : loadCart();
   cartNotes = loadNotes();
   if ($('cartNotes')) $('cartNotes').value = cartNotes;
   applyTextScale(localStorage.getItem(textScaleKey()) || 'md');
