@@ -2015,3 +2015,80 @@ body.is-public .modal-price.locked { display: none; }
   .modal-img .offer-tag { left: 12px !important; right: auto !important; }
   .close { background: rgba(255, 255, 255, .92); }
 }
+
+/* =====================================================================
+   AJUSTES v31: tipografía Ubuntu, base más grande, bordes redondeados
+   y fotos sin filtros (fondo blanco, sin zoom que pixele).
+   ===================================================================== */
+:root {
+  --font: 'Ubuntu', 'Helvetica Neue', Arial, sans-serif;
+  --radius: 12px;
+  --radius-sm: 8px;
+}
+html { font-size: 16px; }
+body { font-family: var(--font); font-size: 16px; }
+.btn { border-radius: var(--radius-sm); font-size: 13px; letter-spacing: .08em; }
+.search-box input { font-size: 16px; }
+.search-box button { font-size: 12px; }
+.icon-link { font-size: 11px; }
+.main-nav button { font-size: 13px; letter-spacing: .1em; }
+.field label { font-size: 11px; letter-spacing: .14em; }
+.field input, .field select { font-size: 15px; }
+.field textarea { border-radius: var(--radius-sm); font-size: 15px; }
+.content-head h3 { font-size: 15px; letter-spacing: .14em; }
+.content-head p { font-size: 15px; }
+.offer-card { border-radius: 999px; }
+.offer-card b, .offer-card span { font-size: 12px; }
+
+/* Fotos: blanco, sin padding, sin mezcla ni zoom */
+.thumb { border-radius: var(--radius); background: #fff; border: 1px solid var(--line); }
+.thumb img { padding: 0; mix-blend-mode: normal; object-fit: contain; }
+.product:hover .thumb img { transform: none; }
+.product:hover .thumb { border-color: #cfcfcf; }
+.thumb .badge { border-radius: 6px; font-size: 11px; }
+.offer-tag { border-radius: 6px !important; font-size: 11px !important; }
+.modal-img { background: #fff; }
+.modal-img img { padding: 0; mix-blend-mode: normal; object-fit: contain; }
+
+/* Tarjeta de producto */
+.info h4 { font-size: 15px; letter-spacing: .01em; min-height: 42px; }
+.price { font-size: 18px; }
+.price.locked, .modal-price.locked { font-size: 12px; letter-spacing: .1em; }
+.card-actions .btn { font-size: 12px; }
+
+/* Modal y cajas */
+.modal-card { border-radius: var(--radius); }
+.modal-body h3 { font-size: 28px; }
+.modal-code { font-size: 12px; }
+.modal .desc { font-size: 16px; }
+.table td { font-size: 15px; }
+.table td:first-child { font-size: 12px; }
+.access-box { border-radius: var(--radius); }
+.access-box-title { font-size: 13px; letter-spacing: .14em; }
+.access-box p { font-size: 15px; }
+.choice-chip { border-radius: var(--radius-sm); font-size: 15px; }
+.qty-stepper { border-radius: var(--radius-sm); overflow: hidden; }
+.cart-panel { border-radius: var(--radius) 0 0 var(--radius); }
+.cart-line { border-radius: var(--radius-sm); }
+.cart-notes textarea { border-radius: var(--radius-sm); }
+.empty { border-radius: var(--radius); }
+
+/* Hero, footer y login */
+.access-hero-copy { font-size: 18px; }
+.eyebrow { font-size: 12px; }
+.footer-col { font-size: 15px; }
+.footer-brand p { font-size: 15px; }
+.footer-legal { font-size: 12px; }
+.login-card { border-radius: var(--radius); }
+.login-card input { font-size: 16px; }
+.login-help { font-size: 15px; }
+.filters-toggle { border-radius: var(--radius-sm); }
+
+@media (max-width: 760px) {
+  .info h4 { font-size: 14px; min-height: 40px; }
+  .price { font-size: 16px; }
+  .price.locked { font-size: 10px; }
+  .modal-body h3 { font-size: 22px; }
+  .modal-card { border-radius: 0; }
+  .cart-panel { border-radius: 0; }
+}
