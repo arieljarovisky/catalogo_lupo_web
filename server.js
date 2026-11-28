@@ -389,6 +389,8 @@ const dbReady = loadDb()
     console.error('No se pudo cargar la base:', err.message);
     throw err;
   });
+// Evita que un fallo de la base tire abajo todo el proceso (en Vercel queda en 500 por request).
+dbReady.catch(() => {});
 
 function isStaticAssetPath(urlPath) {
   return /^\/(assets|js|pdfs|orders)\//.test(urlPath)
