@@ -44,6 +44,11 @@
 
     <section id="panel-products" class="panel active">
       <p id="productScopeBlurb" class="admin-scope-blurb">Productos que importás y vendés a tus mayoristas. Publicar u ocultar define lo que ven tus clientes.</p>
+      <details id="lupohubStatus" class="admin-scope-blurb" hidden>
+        <summary id="lupohubSummary">Stock de LupoHub</summary>
+        <p class="muted" style="font-size:12px;margin:6px 0">Estos productos no se encontraron en LupoHub por código, color y talle; para ellos se usa el stock cargado a mano acá.</p>
+        <ul id="lupohubUnmatched" style="font-size:12px;margin:0;padding-left:18px;max-height:180px;overflow:auto"></ul>
+      </details>
       <div class="toolbar">
         <input id="productSearch" placeholder="Buscar código, nombre o catálogo">
         <select id="productCatalogFilter">
@@ -223,6 +228,9 @@
           <label for="userDiscount">Descuento %</label>
           <input id="userDiscount" type="number" min="0" max="100" step="0.01" value="0" placeholder="0">
         </div>
+        <label class="label-check">
+          <input id="userShowStock" type="checkbox"> Puede ver stock
+        </label>
         <button class="btn btn-black" type="submit">Crear usuario</button>
       </form>
       <div class="admin-table-wrap">
@@ -234,6 +242,7 @@
               <th>Rol</th>
               <th>Lista</th>
               <th>Desc. %</th>
+              <th>Ve stock</th>
               <th>Nueva clave</th>
               <th></th>
             </tr>
@@ -299,6 +308,9 @@
           <div id="editorStockWrap" class="editor-stock-wrap"></div>
           <p class="muted" style="margin:6px 0 0;font-size:12px;">Vacío = sin límite. 0 = sin stock. Solo aplica al catálogo de Argentina.</p>
         </div>
+        <label class="label-check" id="editorShowStockWrap" hidden>
+          <input id="editorShowStock" type="checkbox"> Mostrar stock de este producto a los clientes habilitados
+        </label>
         <label class="label-check" id="editorPublishedWrap" hidden>
           <input id="editorPublished" type="checkbox"> Visible en el catálogo
         </label>

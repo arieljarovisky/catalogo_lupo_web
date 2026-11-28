@@ -46,3 +46,13 @@ Sin `DATABASE_URL` todo sigue funcionando como antes (db.json local o en la rama
 
 - Administrador: `admin` / `admin123`
 - Cliente demo: `cliente` / `cliente123`
+
+## Stock (desde LupoHub)
+
+- El stock **solo se manda con sesión iniciada**. Los administradores siempre lo ven; cada cliente solo si
+  en `/admin` → Usuarios tiene tildado **"Puede ver stock"** (por defecto no).
+- Cada producto muestra stock salvo que en su editor se destilde **"Mostrar stock de este producto"**.
+- Con `LUPOHUB_API_URL` (URL del backend de LupoHub en Railway) y `LUPOHUB_API_KEY` (igual a
+  `CATALOG_STOCK_API_KEY` en LupoHub) el stock se lee de LupoHub cada minuto y se cruza por
+  código de artículo, color y talle. Los productos que no se encuentran usan el stock cargado a mano.
+  En `/admin` (pestaña Argentina) aparece cuántos productos se encontraron y cuáles no.
