@@ -881,7 +881,8 @@ function render() {
   syncSentinel(data.length);
 }
 function productStockMap(p) {
-  return (!brasilMode && p?.stock && typeof p.stock === 'object') ? p.stock : null;
+  // En /brasil el stock (de LupoHub) es solo informativo: se muestra pero no limita el pedido FOB.
+  return (p?.stock && typeof p.stock === 'object') ? p.stock : null;
 }
 function productStockTotal(p) {
   const stock = productStockMap(p);
@@ -976,7 +977,7 @@ function syncChipStockLabels() {
     el.className = 'chip-stock';
     el.textContent = qty > 0 ? `${qty} u.` : 'Agotado';
     btn.appendChild(el);
-    if (qty <= 0) btn.classList.add('is-oos');
+    if (qty <= 0 && !brasilMode) btn.classList.add('is-oos');
   });
 
   $('cartColorChips')?.querySelectorAll('.choice-chip').forEach(btn => {
@@ -991,7 +992,7 @@ function syncChipStockLabels() {
     el.className = 'chip-stock';
     el.textContent = qty > 0 ? `${qty} u.` : 'Agotado';
     btn.appendChild(el);
-    if (qty <= 0) btn.classList.add('is-oos');
+    if (qty <= 0 && !brasilMode) btn.classList.add('is-oos');
   });
 }
 
@@ -1010,6 +1011,20 @@ function syncStockHint() {
     hint.hidden = true;
     hint.textContent = '';
     hint.className = 'stock-hint';
+    $('cartQty')?.removeAttribute('max');
+    if (addBtn) addBtn.disabled = false;
+    return;
+  }
+
+  if (brasilMode) {
+    const total = productStockTotal(p);
+    const picked = size && colorCode && size !== SURTIDO_SIZE && colorCode !== SURTIDO_COLOR;
+    const qty = picked ? stockQty(stock, size, colorCode) : null;
+    hint.hidden = false;
+    hint.className = 'stock-hint';
+    hint.textContent = qty != null
+      ? `Stock en Argentina: ${Math.max(0, qty)} u. para este talle y color`
+      : `Stock en Argentina: ${total ?? 0} u. en total`;
     $('cartQty')?.removeAttribute('max');
     if (addBtn) addBtn.disabled = false;
     return;

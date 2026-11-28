@@ -1453,8 +1453,13 @@ app.get('/api/admin/lupohub-stock', requireAdmin, async (req, res) => {
   res.json({ ...status, matched, total: sellable.length, unmatched });
 });
 
-app.get('/api/admin/catalog-brasil', requireAdmin, (req, res) => {
-  const items = PRODUCTS.map(p => catalogProduct(p, null, { includeFob: true }));
+app.get('/api/admin/catalog-brasil', requireAdmin, async (req, res) => {
+  // Stock de LupoHub (solo informativo en el pedido FOB). Sin LupoHub queda el stock cargado a mano.
+  const lupohubIndex = await loadLupohubIndex();
+  const items = PRODUCTS.map(p => catalogProduct(p, null, {
+    includeFob: true,
+    stock: effectiveStock(p, lupohubIndex)
+  }));
   sendGzipJson(req, res, {
     products: items,
     catalogs: catalogSummaries(items),
